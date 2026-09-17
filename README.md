@@ -33,6 +33,47 @@ python run.py serve --port 5000
 > `update` 不带 `--market` 已覆盖三个市场；`--market CHINEXT` 只是子集；
 > `optimize` 不带参数即三个市场分别优化；`backtest --sample oos/full` 只是两种视图。
 
+## 每日手动使用（无定时任务时）
+
+如果没有跑定时任务，每天想打开网页看最新指标，需要两步：
+
+**步骤 1：拉取当天数据并计算情绪快照（每天只需跑一次）**
+
+```bash
+# 增量更新三市场当天数据 + 计算当日情绪分数（数分钟；行情缺口的日期会顺延补齐）
+python run.py update
+```
+
+**步骤 2：启动 Web 服务（前台运行；想停掉用 `Ctrl+C`）**
+
+```bash
+python run.py serve --port 5000
+# 浏览器打开 http://127.0.0.1:5000
+```
+
+一条命令把两步串起来（适合 PowerShell / bash 写进快捷方式）：
+
+```bash
+# PowerShell (Windows)
+python run.py update; python run.py serve --port 5000
+
+# bash / Git Bash
+python run.py update && python run.py serve --port 5000
+```
+
+### 常见使用模式
+
+- **只想看盘前当前数据、不想启动网页**：`python run.py update`，
+  输出里会打印每个市场的当日日期、分数、级别，例如
+  `[A_SHARE] A股 2026-09-17 情绪 28.3（恐慌）[V2]`。
+- **只想看历史页面、数据今早已 `update` 过**：直接 `python run.py serve --port 5000`
+  即可，`serve` 只读 `sentiment.db`，不动行情缓存。
+- **端口被占用**：换端口 `python run.py serve --port 5001`（地址同步改成 5001）。
+- **后台常开网页、每日单独 `update`**：开一个终端窗口跑 `serve` 不关，
+  另开一个终端每天跑 `update`；跑完 `update` 之后刷新浏览器就能看到新数据。
+- **首次 / 较长时间没跑过**：`update` 会按缺口顺延补齐最近的行情，所需时间视
+  缺失天数而定（正常 1 天通常几十秒）。
+
 ## 迁移到新电脑
 
 **状态全部落在 `data/` 目录的文件里，只要整个项目目录（含 `data/`）拷过去，
