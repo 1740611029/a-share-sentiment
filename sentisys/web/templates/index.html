@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="cards">
+  {% for c in cards %}
+  <div class="card">
+    <h3>{{ c.name }}情绪 <span class="muted">{{ c.date or '暂无数据' }}</span></h3>
+    {% if c.sentiment_score is not none %}
+    <div class="score" style="color: {{ c.color }}">{{ c.sentiment_score }}</div>
+    <span class="level-badge" style="background: {{ c.color }}">{{ c.sentiment_level }}</span>
+    <p style="margin-top:10px">{{ c.trend }}</p>
+    {% if c.idx_ret_1d is not none %}
+    <p class="muted" style="margin-top:4px">
+      参考指数
+      {% if c.idx_ret_1d > 0 %}<span class="tag-up">+{{ '%.2f%%'|format(c.idx_ret_1d) }}</span>
+      {% elif c.idx_ret_1d < 0 %}<span class="tag-down">{{ '%.2f%%'|format(c.idx_ret_1d) }}</span>
+      {% else %}<span class="muted">0.00%</span>{% endif %}
+    </p>
+    {% endif %}
+    <p class="muted" style="margin-top:6px">
+      20日分位 {{ c.percentile20 }}% ｜ 60日 {{ c.percentile60 }}% ｜ 250日 {{ c.percentile250 }}%
+    </p>
+    <p style="margin-top:8px">极端信号：
+      {% if c.signal == '极端恐慌' %}<span class="sig-panic">极端恐慌</span>
+      {% elif c.signal == '极端过热' %}<span class="sig-hot">极端过热</span>
+      {% else %}<span class="muted">无</span>{% endif %}
+      {% if c.pattern %}<span class="muted">（{{ c.pattern }}）</span>{% endif %}
+      {% if c.divergence %}<span class="muted">｜{{ c.divergence }}</span>{% endif %}
+    </p>
+    {% if c.oos %}
+    <p class="muted" style="margin-top:8px">
+      样本外（{{ c.version }}）：
+      极端恐慌命中率
+      {% if c.oos.panic.hit_rate is not none %}{{ '%.0f%%'|format(c.oos.panic.hit_rate * 100) }}(n={{ c.oos.panic.signals }})
+      {% else %}样本不足{% endif %}
+      ｜极端过热命中率
+      {% if c.oos.hot.hit_rate is not none %}{{ '%.0f%%'|format(c.oos.hot.hit_rate * 100) }}(n={{ c.oos.hot.signals }})
+      {% else %}样本不足{% endif %}
+    </p>
+    {% endif %}
+    {% else %}
+    <p class="muted">尚未生成数据，请先执行：python run.py update --market {{ c.market }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="muted">说明：情绪分数 0~100，越高越热。数据每日由 run.py update 计算生成；阈值与权重以激活模型版本为准。</p>
+{% endblock %}

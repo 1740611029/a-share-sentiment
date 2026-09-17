@@ -1,0 +1,27 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---------- 虚拟环境 ----------
+.venv/
+venv/
+env/
+
+# ---------- 大体积数据缓存（可用 python run.py update 重新生成） ----------
+# 约 5000 只个股 4 年日线，约 190MB，不适合入库
+data/cache/
+
+# ---------- 日志 / 临时文件 ----------
+*.log
+*.tmp
+*.bak
+
+# ---------- 编辑器 / 操作系统 ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

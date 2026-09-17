@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}A股情绪指标系统{% endblock %}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+         background: #0f1420; color: #e6e9f0; min-height: 100vh; }
+  nav { background: #161d2e; padding: 14px 28px; display: flex; gap: 26px;
+        align-items: center; border-bottom: 1px solid #263050; }
+  nav .brand { font-weight: 700; font-size: 17px; color: #7ea6ff; }
+  nav a { color: #aab4d0; text-decoration: none; font-size: 14px; }
+  nav a.active, nav a:hover { color: #fff; }
+  main { padding: 24px 28px; max-width: 1280px; margin: 0 auto; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+           gap: 18px; margin-bottom: 26px; }
+  .card { background: #1a2236; border: 1px solid #2a3654; border-radius: 12px;
+          padding: 20px 22px; }
+  .card h3 { font-size: 15px; color: #aab4d0; margin-bottom: 10px; }
+  .score { font-size: 44px; font-weight: 700; line-height: 1.1; }
+  .level-badge { display: inline-block; padding: 3px 12px; border-radius: 20px;
+                 font-size: 13px; color: #10131c; font-weight: 600; margin-top: 8px; }
+  .muted { color: #7d879e; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #242e48; }
+  th { color: #8fa0c4; font-weight: 600; background: #1a2236; position: sticky; top: 0; }
+  td:first-child, th:first-child { text-align: left; }
+  .panel { background: #161d2e; border: 1px solid #263050; border-radius: 12px;
+           padding: 18px 20px; margin-bottom: 22px; }
+  .panel h2 { font-size: 16px; margin-bottom: 14px; color: #c7d2ec; }
+  .btn { background: #263050; color: #cfd8ee; border: none; padding: 6px 16px;
+         border-radius: 8px; cursor: pointer; font-size: 13px; margin-right: 8px; }
+  .btn.active { background: #3d64d8; color: #fff; }
+  .tag-up { color: #f16d6d; } .tag-down { color: #4ecb8f; }
+  .sig-panic { color: #4ecb8f; font-weight: 700; }
+  .sig-hot { color: #f16d6d; font-weight: 700; }
+  .fail-row { background: rgba(214, 51, 108, .12); }
+  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+           justify-content: center; align-items: center; z-index: 99; }
+  #modal .box { background: #1a2236; border: 1px solid #3a4a74; border-radius: 12px;
+                padding: 24px 28px; min-width: 380px; }
+  #modal .box h3 { margin-bottom: 12px; }
+  #modal .box p { margin: 5px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">A股三市场情绪指标</span>
+  <a href="/" class="{{ 'active' if request.path == '/' }}">实时首页</a>
+  <a href="/history" class="{{ 'active' if request.path == '/history' }}">情绪历史</a>
+  <a href="/backtest" class="{{ 'active' if request.path == '/backtest' }}">历史回测</a>
+</nav>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

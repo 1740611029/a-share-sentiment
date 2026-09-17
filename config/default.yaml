@@ -1,0 +1,105 @@
+# ============================
+# A股三市场情绪指标系统 - 全局配置
+# ============================
+
+data:
+  cache_dir: data/cache          # 个股/指数日线 parquet 缓存目录
+  factor_dir: data/factors       # 因子表缓存目录
+  db_path: data/sentiment.db     # SQLite 数据库（快照/版本/回测结果）
+  history_years: 4               # 历史数据拉取年限（含 250 日预热窗口）
+  workers: 16                    # 日线下载并发线程数（腾讯源限流约2只/秒，增大无效）
+  retry: 3                       # 单只股票下载重试次数
+
+# ---------- 三大市场定义 ----------
+markets:
+  A_SHARE:
+    name: A股全市场
+    boards: [SH_MAIN, SZ_MAIN, CHINEXT, STAR]   # 可选加入 BJ
+    index_refs:                  # 指数因子参考（代码: 权重）
+      sh000001: 0.25             # 上证指数
+      sz399001: 0.20             # 深证成指
+      sh000300: 0.15             # 沪深300
+      sh000852: 0.15             # 中证1000
+      sz399006: 0.15             # 创业板指
+      sh000688: 0.10             # 科创50
+    primary_index: sh000001      # 回测顶/底判定与背离参考指数
+  CHINEXT:
+    name: 创业板
+    boards: [CHINEXT]
+    index_refs:
+      sz399006: 1.0
+    primary_index: sz399006
+  STAR:
+    name: 科创板
+    boards: [STAR]
+    index_refs:
+      sh000688: 1.0
+    primary_index: sh000688
+
+# ---------- 股票池过滤规则 ----------
+filters:
+  exclude_st: true               # 排除 ST / *ST
+  exclude_delisting: true        # 排除退市整理（名称含"退"）
+  min_list_days: 90              # 上市不足 90 个自然日的新股排除
+  min_history_days: 250          # 历史数据不足 250 根的，不参与宽度类因子
+  min_pool_ratio: 0.3            # 当日可统计股票数 < 股票池30% 视为数据异常
+
+# ---------- 各板块涨跌停幅度(%) ----------
+limit_rules:
+  SH_MAIN: 10.0
+  SZ_MAIN: 10.0
+  CHINEXT: 20.0
+  STAR: 20.0
+  BJ: 30.0
+limit_tolerance: 0.3             # 涨跌停判定容差（百分点）
+
+# ---------- 情绪模型（V1 初始参数，优化后存为模型版本） ----------
+sentiment:
+  weights:                       # 六大因子初始权重
+    adv_decline: 0.20            # 涨跌家数
+    distribution: 0.15           # 涨跌幅分布
+    limit: 0.20                  # 涨停/跌停/炸板
+    volume: 0.15                 # 成交量/成交额
+    breadth: 0.20                # 市场宽度
+    index: 0.10                  # 指数因素
+  factor_rank_window: 250        # 因子原始值 → 0~100 子分数的历史分位窗口（交易日）
+  factor_rank_min_periods: 60    # 分位计算最少历史样本
+  percentile_windows: [20, 60, 120, 250]   # 情绪分数的历史分位窗口
+  extreme_panic: 10              # 极端恐慌阈值（<=）
+  extreme_hot: 90                # 极端过热阈值（>=）
+  # 状态分级阈值（下限, 名称）
+  levels:
+    - [0, 极度恐慌]
+    - [10, 恐慌]
+    - [25, 偏冷]
+    - [40, 中性]
+    - [60, 偏热]
+    - [75, 过热]
+    - [90, 极度过热]
+  trend_flat_band: 2.0           # 日变化绝对值 <= 2 视为"情绪平稳"
+  repair_lookback: 5             # 恐慌修复/高位降温识别回看天数
+  high_position_gain: 0.5        # 高位股定义：60日内自最低点涨幅 >= 50%
+  high_position_window: 60
+  new_highlow_window: 250        # 创新高/新低窗口
+
+# ---------- 回测 ----------
+backtest:
+  observe_lags: [0, 1, 2]        # T+0 / T+1 / T+2
+  pivot_mode: zone               # 顶/底定义：zone(价格位置+确认反弹) / strict(精确局部极值)
+  pos_tol: 0.02                  # zone 模式价格位置容差（相对前 pivot_left 日极值）
+  pivot_left: 5                  # 顶/底判定：左侧窗口（交易日）
+  confirm_window: 10             # 顶/底判定：右侧确认窗口（交易日）
+  rebound_pct: 0.03              # 阶段反弹/回落最小幅度
+  signal_cooldown: 3             # 信号去重冷却期（交易日）
+  train_exclude_recent_days: 365 # 最近 1 年作为样本外，不参与参数优化
+  min_samples: 5                 # 最低有效样本数（低于此值显示样本不足）
+  walk_forward_folds: 3          # walk-forward 折数
+
+# ---------- 参数自动优化搜索空间 ----------
+optimize:
+  panic_thresholds: [3, 4, 5, 6, 8, 10, 12, 15]
+  hot_thresholds: [85, 88, 90, 92, 94, 95, 97]
+  rebound_pcts: [0.01, 0.015, 0.02, 0.03, 0.05]
+  pos_tols: [0.0, 0.01, 0.02, 0.03]
+  weight_random_trials: 1200     # 权重随机搜索次数
+  stability_penalty: 0.5         # walk-forward 命中率标准差惩罚系数

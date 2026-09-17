@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}历史回测{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2>历史回测</h2>
+  <div style="margin-bottom:14px">
+    {% for m, name in market_names.items() %}
+    <button class="btn {{ 'active' if m == market }}" onclick="location.href='/backtest?market={{ m }}'">{{ name }}</button>
+    {% endfor %}
+  </div>
+  {% if run and stats %}
+  <p class="muted">
+    run #{{ run.id }} ｜ 样本：{{ {'train':'训练区间','oos':'样本外','full':'全量'}.get(run.sample_tag, run.sample_tag) }} ｜ 区间：{{ run.period_start }} ~ {{ run.period_end }} ｜
+    参数：恐慌≤{{ run.params.extreme_panic }}，过热≥{{ run.params.extreme_hot }}，
+    反弹/回落≥{{ '%.1f%%'|format(run.params.rebound_pct * 100) }}，
+    确认窗口 {{ run.params.confirm_window }} 日
+  </p>
+  {% if runs|length > 1 %}
+  <p style="margin-top:8px">切换记录：
+    {% for r in runs[:8] %}
+    {% set tag_cn = {'train':'训练区间','oos':'样本外','full':'全量'}.get(r.sample_tag, r.sample_tag) %}
+    <button class="btn {{ 'active' if r.id == run.id }}" onclick="location.href='/backtest?market={{ market }}&run_id={{ r.id }}'">#{{ r.id }} {{ tag_cn }}</button>
+    {% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="cards">
+  {% for key, label in [('panic', '极端恐慌 → 阶段底部'), ('hot', '极端过热 → 阶段顶部')] %}
+  {% set s = stats[key] %}
+  <div class="card">
+    <h3>{{ label }}</h3>
+    {% if not s.sample_enough %}
+    <p class="sig-hot">样本不足，暂不能验证90%命中率（当前 {{ s.signals }} 次）</p>
+    {% else %}
+    <div class="score" style="color: {{ '#4ecb8f' if s.hit_rate >= 0.9 else '#f16d6d' }}">
+      {{ '%.0f%%'|format(s.hit_rate * 100) }}</div>
+    {% endif %}
+    <table style="margin-top:10px">
+      <tr><td>信号总数</td><td>{{ s.signals }}{% if s.unconfirmed %}（+{{ s.unconfirmed }} 未确认）{% endif %}</td></tr>
+      <tr><td>成功 / 失败</td><td>{{ s.success }} / {{ s.fail }}</td></tr>
+      <tr><td>T+0 命中率</td><td>{{ '%.0f%%'|format(s.t0_rate * 100) if s.t0_rate is not none else '—' }}（{{ s.t0_hits }}次）</td></tr>
+      <tr><td>T+1 命中率</td><td>{{ '%.0f%%'|format(s.t1_rate * 100) if s.t1_rate is not none else '—' }}（{{ s.t1_hits }}次）</td></tr>
+      <tr><td>T+2 命中率</td><td>{{ '%.0f%%'|format(s.t2_rate * 100) if s.t2_rate is not none else '—' }}（{{ s.t2_hits }}次）</td></tr>
+      <tr><td>T+0~T+2 累计</td><td><b>{{ '%.0f%%'|format(s.hit_rate * 100) if s.hit_rate is not none else '—' }}</b></td></tr>
+      <tr><td>信号覆盖率</td><td>{{ '%.1f%%'|format(s.coverage * 100) if s.coverage is not none else '—' }}</td></tr>
+      <tr><td>最大连续失败</td><td>{{ s.max_consec_fail }}</td></tr>
+    </table>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  <h2>信号明细（含失败案例，红色行为失败信号）</h2>
+  <div style="max-height:520px; overflow:auto">
+  <table>
+    <thead><tr>
+      <th>信号日期</th><th>类型</th><th>情绪</th><th>顶/底日期</th><th>偏差</th>
+      <th>T+0</th><th>T+1</th><th>T+2</th><th>最大反弹</th><th>最大回撤</th><th>结果</th>
+    </tr></thead>
+    <tbody>
+      {% for s in signals %}
+      <tr class="{{ 'fail-row' if s.success == 0 }}">
+        <td>{{ s.signal_date }}</td>
+        <td>{{ '极端恐慌' if s.signal_type == 'panic' else '极端过热' }}</td>
+        <td>{{ s.sentiment }}</td>
+        <td>{{ s.pivot_date or '—' }}</td>
+        <td>{{ s.lag if s.lag is not none else '—' }}</td>
+        <td>{{ '✓' if s.hit_t0 }}</td><td>{{ '✓' if s.hit_t1 }}</td><td>{{ '✓' if s.hit_t2 }}</td>
+        <td>{{ '%.2f%%'|format(s.max_rebound * 100) if s.max_rebound is not none else '—' }}</td>
+        <td>{{ '%.2f%%'|format(s.max_drawdown * 100) if s.max_drawdown is not none else '—' }}</td>
+        <td>{{ '未确认' if s.success is none else ('成功' if s.success else '失败') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if versions %}
+<div class="panel">
+  <h2>模型版本</h2>
+  <table>
+    <thead><tr><th>版本</th><th>激活</th><th>训练区间</th><th>样本外区间</th><th>创建时间</th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr><td>{{ v.version }}</td><td>{{ '✓' if v.is_active }}</td>
+          <td>{{ v.train_period }}</td><td>{{ v.oos_period }}</td><td>{{ v.created_at }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% else %}
+<p class="muted">该市场暂无回测记录。请先执行：python run.py update --market {{ market }}，然后 python run.py optimize --market {{ market }}</p>
+</div>
+{% endif %}
+{% endblock %}
