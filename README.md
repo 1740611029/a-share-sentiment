@@ -36,6 +36,10 @@ py run.py serve --port 5000
 
 ## 快速开始
 
+> **不想敲命令？** 装完依赖后直接双击项目根目录的
+> **`run_daily.bat`**（更新数据）和 **`run_web.bat`**（打开网页）即可，
+> 详见下方「每日更新 & 运行脚本」。
+
 ```bash
 pip install -r requirements.txt
 
@@ -110,26 +114,38 @@ py run.py update && py run.py serve --port 5000
 
 ## 每日更新 & 运行脚本（scripts/）
 
-`scripts/` 下提供了开箱即用的一键脚本，不用每次手敲命令。
+### 项目根目录：四个双击即用的入口
+
+不想记命令的话，直接用根目录这四个（Windows 双击 `.bat`，其余双击 `.sh`）：
+
+| 根目录脚本 | 干什么 |
+|---|---|
+| **`run_daily.bat`** | **每日更新**（Windows 双击） |
+| **`run_web.bat`** | **启动网页** http://127.0.0.1:5000（Windows 双击） |
+| `run_daily.sh` | 每日更新（Linux / macOS / Git Bash） |
+| `run_web.sh` | 启动网页（Linux / macOS / Git Bash） |
+
+**日常用法就两步**：先双击 `run_daily.bat` 等它跑完（几分钟），再双击 `run_web.bat` 打开网页。
+
+### scripts/ 下的完整脚本
 
 | 文件 | 用途 |
 |---|---|
 | `scripts/daily_update.py` | 每日更新主脚本：拉行情 → 算情绪 → 刷波段信号 |
-| `scripts/daily_update.bat` | Windows 版，**双击即可运行** |
-| `scripts/daily_update.sh` | Linux / macOS / Git Bash 版 |
+| `scripts/daily_update.bat` / `.sh` | Windows / Linux 版更新脚本（根目录入口转发到这里） |
 | `scripts/start_web.bat` / `.sh` | 启动 Web 界面（前台运行，Ctrl+C 停止） |
 | `scripts/install_daily_task.ps1` | 注册 Windows 计划任务，每天自动更新 |
 | `scripts/crontab.example` | Linux/macOS 的 cron 配置示例 |
 | `scripts/download_shard.py` | 首次全量构建时的多进程分片下载加速 |
 
-### 一键更新
+### 一键更新（命令行版）
 
 ```bash
-# Windows：双击 scripts\daily_update.bat，或在终端里
+# Windows
 py -3 scripts/daily_update.py
 
 # Linux / macOS / Git Bash
-./scripts/daily_update.sh
+./run_daily.sh
 ```
 
 相比直接 `python run.py update`，这个脚本多了四件事：
@@ -153,9 +169,9 @@ py -3 scripts/daily_update.py --dry-run             # 只打印将要执行的�
 ### 启动网页
 
 ```bash
-# Windows：双击 scripts\start_web.bat；改端口就 scripts\start_web.bat 5001
-./scripts/start_web.sh          # 端口 5000
-./scripts/start_web.sh 5001     # 指定端口
+# Windows：双击根目录 run_web.bat；改端口就 run_web.bat 5001
+./run_web.sh                    # 端口 5000
+./run_web.sh 5001               # 指定端口
 ```
 
 ### 定时自动跑
