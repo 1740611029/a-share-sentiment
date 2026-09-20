@@ -37,7 +37,7 @@ py run.py serve --port 5000
 ## 快速开始
 
 > **不想敲命令？** 装完依赖后直接双击项目根目录的
-> **`run_daily.bat`**（更新数据）和 **`run_web.bat`**（打开网页）即可，
+> **`每日更新.bat`**（更新数据）和 **`运行项目.bat`**（打开网页）即可，
 > 详见下方「每日更新 & 运行脚本」。
 
 ```bash
@@ -120,12 +120,12 @@ py run.py update && py run.py serve --port 5000
 
 | 根目录脚本 | 干什么 |
 |---|---|
-| **`run_daily.bat`** | **每日更新**（Windows 双击） |
-| **`run_web.bat`** | **启动网页** http://127.0.0.1:5000（Windows 双击） |
-| `run_daily.sh` | 每日更新（Linux / macOS / Git Bash） |
-| `run_web.sh` | 启动网页（Linux / macOS / Git Bash） |
+| **`每日更新.bat`** | **每日更新**（Windows 双击） |
+| **`运行项目.bat`** | **启动网页** http://127.0.0.1:5000（Windows 双击） |
+| `每日更新.sh` | 每日更新（Linux / macOS / Git Bash） |
+| `运行项目.sh` | 启动网页（Linux / macOS / Git Bash） |
 
-**日常用法就两步**：先双击 `run_daily.bat` 等它跑完（几分钟），再双击 `run_web.bat` 打开网页。
+**日常用法就两步**：先双击 `每日更新.bat` 等它跑完（几分钟），再双击 `运行项目.bat` 打开网页。
 
 ### scripts/ 下的完整脚本
 
@@ -145,7 +145,7 @@ py run.py update && py run.py serve --port 5000
 py -3 scripts/daily_update.py
 
 # Linux / macOS / Git Bash
-./run_daily.sh
+./每日更新.sh
 ```
 
 相比直接 `python run.py update`，这个脚本多了四件事：
@@ -169,9 +169,9 @@ py -3 scripts/daily_update.py --dry-run             # 只打印将要执行的�
 ### 启动网页
 
 ```bash
-# Windows：双击根目录 run_web.bat；改端口就 run_web.bat 5001
-./run_web.sh                    # 端口 5000
-./run_web.sh 5001               # 指定端口
+# Windows：双击根目录 运行项目.bat；改端口就 运行项目.bat 5001
+./运行项目.sh                    # 端口 5000
+./运行项目.sh 5001               # 指定端口
 ```
 
 ### 定时自动跑
@@ -189,6 +189,12 @@ schtasks /Query  /TN "A股情绪指标-每日更新" /V /FO LIST   # 查看上�
 ```
 
 > 默认 18:30 是因为 A 股 15:00 收盘，日线数据通常 15:30~17:00 后才在数据源就位。
+>
+> 若安装脚本报「未找到可用的 Python 3」：它会依次尝试 `py` 启动器、
+> `C:\Windows\py.exe`、`python`/`python3`、以及 `%LOCALAPPDATA%\Programs\Python` 下的
+> 安装目录 —— 都找不到才报错。某些被安全软件接管 PATH 的终端里 `Get-Command` 会失灵，
+> 此时脚本仍能靠 `C:\Windows\py.exe` 兜底。找到后会自动校验版本 ≥ 3.10，
+> 避免命中 PATH 里残留的 Python 2.7。
 
 **Linux / macOS（cron）：** 参考 `scripts/crontab.example`，`crontab -e` 粘贴即可。
 
