@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% from "_verdict.html" import verdict_row %}
+{% block title %}模型对比{% endblock %}
+{% block pagetitle %}模型对比{% endblock %}
+{% block pagesub %}三个市场 × 五套筛选条件摆在一起看 · 只列客观数据，不排名、不推荐{% endblock %}
+{% block head %}<style>
+.cmp td:first-child, .cmp th:first-child{min-width:168px}
+.cmp tr.grp-start td{border-top:1px solid var(--line-2)}
+.cmp tbody tr:hover td:first-child{background:var(--bg-2)}
+</style>{% endblock %}
+
+{% block content %}
+<div class="note-bar warn">
+  <div>
+    <b style="color:var(--tx-1)">⚠ 先看这条：本页的"瞎猜"基线非常高</b><br>
+    波段模型的命中定义比较宽松（10 个交易日内出现最低价、之后反弹够 3%），
+    这个条件<b>随便挑一天也经常满足</b> —— 创业板、科创板的瞎猜基线高达 <b>53.5%</b>，A股 26.0%。<br>
+    所以「命中率 66%」<b>并不代表厉害</b>，得减去基线才是真实价值。
+    表里绿色 ✓ 标记的是<b>统计上真的站得住</b>的组合（双尾 p&lt;0.05）—— 目前<b>只有创业板模型B 的见底方向</b>。<br>
+    有几个组合的命中率甚至<b>低于瞎猜</b>（见鼠标悬停提示），这类应当直接排除。
+  </div>
+</div>
+
+<div class="note-bar">
+  <div>
+    <b style="color:var(--tx-1)">这一页故意不告诉你「哪套最好」</b><br>
+    它只是把三个市场、五套筛选条件的客观成绩并排放好。选哪套取决于你能接受多少信号、
+    能扛几次连续失手——这个判断得你自己做。<br>
+    <b>三个容易踩的坑</b>：① 先看瞎猜基线，命中率减去它才有意义；
+    ② 信号数少的时候命中率会剧烈跳动（n=1、n=2 的百分比纯属噪声）；
+    ③ 命中率再高，也要看「最大连败」和「平均最大回落」——中间扛不住就白搭。
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-hd">
+    <h2>横向对比</h2>
+    <span class="hint muted">信号发出后往后看 10 个交易日 · 同一组合优先展示全部历史</span>
+  </div>
+
+  {% if not rows %}
+  <div class="empty">暂无数据，请先运行 <code>py run.py swing</code>。</div>
+  {% else %}
+  <div class="tbl-wrap tbl-sticky">
+    <table class="cmp">
+      <thead>
+        <tr class="grp-row">
+          <th class="txt" rowspan="2">市场 / 筛选条件</th>
+          <th colspan="6" class="panic">预期见底方向（极端恐慌之后）</th>
+          <th colspan="6" class="hot">预期见顶方向（极端过热之后）</th>
+          <th class="txt" rowspan="2">统计区间</th>
+        </tr>
+        <tr>
+          <th title="信号后 10 天内真的见底的比例">对了多少</th><th title="一共发出过多少次信号，先看这个">信号数</th>
+          <th title="随便挑一天，同样条件下见底的概率 —— 这才是及格线">瞎猜</th>
+          <th title="平均在信号后第几天见底，越小越及时">平均几天见底</th><th title="见底后平均能反弹多少">平均能弹</th><th title="最长连续错了几次，≥3 标红">最大连败</th>
+          <th title="信号后 10 天内真的见顶的比例">对了多少</th><th title="一共发出过多少次信号，先看这个">信号数</th>
+          <th title="随便挑一天，同样条件下见顶的概率 —— 这才是及格线">瞎猜</th>
+          <th title="平均在信号后第几天见顶，越小越及时">平均几天见顶</th><th title="见顶后平均回落多少">平均回落</th><th title="最长连续错了几次，≥3 标红">最大连败</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% set ns = namespace(prev='') %}
+      {% for r in rows %}
+      <tr class="{{ 'grp-start' if r.market != ns.prev else '' }}">
+        <td class="txt">
+          {% if r.market != ns.prev %}
+          <div style="font-weight:500">{{ r.market_name }}</div>
+          {% endif %}
+          <div class="muted" style="font-size:11.5px; line-height:1.5">
+            <span style="font-family:var(--font-mono); color:var(--acc-hi)">模型{{ r.model_code }}</span>
+            {{ r.model_name }}
+          </div>
+        </td>
+        <td title="瞎猜 {{ '%.1f%%' % (r.panic.baseline * 100) if r.panic.baseline is not none else '—' }}，双尾p={{ '%.3f' % r.panic.p2 if r.panic.p2 is not none else '—' }}">
+          <b style="color:{{ 'var(--down)' if r.panic.verdict and r.panic.verdict.startswith('优于') else 'var(--tx-1)' }}">{{ '%.1f%%' % (r.panic.hit_rate * 100) if r.panic.hit_rate is not none else '—' }}</b>
+          {% if r.panic.verdict and r.panic.verdict.startswith('优于') %}<span class="down"> ✓</span>{% endif %}</td>
+        <td>{{ r.panic.signals }}</td>
+        <td class="muted">{{ '%.0f%%' % (r.panic.baseline * 100) if r.panic.baseline is not none else '—' }}</td>
+        <td>{{ 'T+%.1f' % r.panic.avg_pivot_lag if r.panic.avg_pivot_lag is not none else '—' }}</td>
+        <td class="down">{{ '%.2f%%' % (r.panic.avg_max_rebound * 100) if r.panic.avg_max_rebound is not none else '—' }}</td>
+        <td class="{{ 'up' if r.panic.max_consec_fail >= 3 }}">{{ r.panic.max_consec_fail }}</td>
+        <td title="瞎猜 {{ '%.1f%%' % (r.hot.baseline * 100) if r.hot.baseline is not none else '—' }}，双尾p={{ '%.3f' % r.hot.p2 if r.hot.p2 is not none else '—' }}">
+          <b style="color:{{ 'var(--down)' if r.hot.verdict and r.hot.verdict.startswith('优于') else 'var(--tx-1)' }}">{{ '%.1f%%' % (r.hot.hit_rate * 100) if r.hot.hit_rate is not none else '—' }}</b>
+          {% if r.hot.verdict and r.hot.verdict.startswith('优于') %}<span class="down"> ✓</span>{% endif %}</td>
+        <td>{{ r.hot.signals }}</td>
+        <td class="muted">{{ '%.0f%%' % (r.hot.baseline * 100) if r.hot.baseline is not none else '—' }}</td>
+        <td>{{ 'T+%.1f' % r.hot.avg_pivot_lag if r.hot.avg_pivot_lag is not none else '—' }}</td>
+        <td class="up">{{ '%.2f%%' % (r.hot.avg_max_rebound * 100) if r.hot.avg_max_rebound is not none else '—' }}</td>
+        <td class="{{ 'up' if r.hot.max_consec_fail >= 3 }}">{{ r.hot.max_consec_fail }}</td>
+        <td class="txt muted" style="font-size:11.5px">{{ r.period }}</td>
+      </tr>
+      {% set ns.prev = r.market %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if rows %}
+<div class="panel">
+  <h2>表头每个词是什么意思</h2>
+  <div class="stat-grid" style="grid-template-columns:1fr">
+    <div class="kv"><span class="k">对了多少（见底方向）</span><span class="v muted" style="font-family:var(--font-sans)">发「极端恐慌」信号后 10 个交易日内，真的出现了这期间的最低价，而且最低点之后反弹够确认幅度的比例。</span></div>
+    <div class="kv"><span class="k">对了多少（见顶方向）</span><span class="v muted" style="font-family:var(--font-sans)">发「极端过热」信号后 10 个交易日内，真的出现了这期间的最高价，而且最高点之后回落够确认幅度的比例。</span></div>
+    <div class="kv"><span class="k">信号数</span><span class="v muted" style="font-family:var(--font-sans)">一共发出过多少次信号。次数少的时候百分比会剧烈跳动，先看这个数再看百分比。</span></div>
+    <div class="kv"><span class="k">平均几天见底 / 见顶</span><span class="v muted" style="font-family:var(--font-sans)">从信号日到极值日的平均交易日数。数字越小，说明信号来得越及时。</span></div>
+    <div class="kv"><span class="k">平均能弹 / 平均回落</span><span class="v muted" style="font-family:var(--font-sans)">方向对了之后，平均还能走出多少空间。见顶方向的回落是负数，绝对值越大表示跌得越深。</span></div>
+    <div class="kv"><span class="k">最大连败</span><span class="v muted" style="font-family:var(--font-sans)">历史上最长连续错了几次，达到 3 次会标红。这个数字往往比命中率更能说明实际用起来难不难扛。</span></div>
+  </div>
+  <p class="muted" style="margin-top:12px; line-height:1.7">
+    一句话总结：<b style="color:var(--tx-1)">先看信号数够不够，再看对了多少，最后看最大连败扛不扛得住。</b>
+    样本很少的组合，成绩波动会很大，请谨慎参考。
+  </p>
+</div>
+{% endif %}
+{% endblock %}

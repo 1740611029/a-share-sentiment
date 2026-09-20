@@ -1,0 +1,17 @@
+# ============================================================
+#  A股情绪指标 - Linux / macOS 定时任务示例
+#  安装：crontab -e  然后把下面内容粘进去（按需改路径与时间）
+#  查看：crontab -l
+#
+#  A股收盘 15:00，日线数据通常 15:30~17:00 后可用，因此盘后跑。
+#  注意 cron 的 PATH 很干净，python 建议写绝对路径（用 which python3 查）。
+# ============================================================
+
+# 每个工作日 18:30 更新三市场情绪快照，日志由脚本自己写到 data/logs/
+30 18 * * 1-5 cd /path/to/情绪指标 && /usr/bin/python3 scripts/daily_update.py >> data/logs/cron.log 2>&1
+
+# 同上，但周末也跑（--skip-weekend 让脚本自己判断，法定节假日仍会跑一次，无新数据无害）
+# 30 18 * * * cd /path/to/情绪指标 && /usr/bin/python3 scripts/daily_update.py --skip-weekend >> data/logs/cron.log 2>&1
+
+# 更新后自动把当日快照提交并推送到 GitHub（需已配置好 git 凭据）
+# 30 18 * * 1-5 cd /path/to/情绪指标 && /usr/bin/python3 scripts/daily_update.py --git-push >> data/logs/cron.log 2>&1

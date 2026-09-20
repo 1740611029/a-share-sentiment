@@ -1,98 +1,249 @@
 {% extends "base.html" %}
-{% block title %}历史回测{% endblock %}
+{% from "_verdict.html" import verdict_row %}
+{% block title %}情绪回测{% endblock %}
+{% block pagetitle %}情绪回测{% endblock %}
+{% block pagesub %}这套信号历史上到底准不准 · 发出后 3 天内见底/见顶的比例，含全部失败案例{% endblock %}
+{% block head %}<style>
+.tstep{display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line-1)}
+.tstep:last-child{border-bottom:0}
+.tstep .lbl{font-family:var(--font-mono); font-size:11px; color:var(--tx-3); width:38px; flex:0 0 38px}
+.tstep .track{flex:1; height:6px; background:var(--bg-3); border-radius:3px; overflow:hidden; min-width:50px}
+.tstep .track i{display:block; height:100%; border-radius:3px; transition:width .5s cubic-bezier(.22,1,.36,1)}
+.tstep .num{font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+            font-size:12.5px; width:86px; text-align:right; flex:0 0 86px}
+</style>{% endblock %}
+
 {% block content %}
+<div class="note-bar">
+  <div>
+    <b style="color:var(--tx-1)">这一页在回答一个问题：这套信号靠不靠谱</b><br>
+    做法是翻历史账本——每次系统发出「极端恐慌」，就往回查：市场后来真的见底了吗？隔了几天？
+    反过来「极端过热」也一样。下面两张卡片分别是底部方向和顶部方向的成绩。<br>
+    <b>看成绩时请守两条规矩</b>：① 先看「信号总数」，次数太少时百分比不作数；
+    ② 分清{{ tip('训练期') }}和{{ tip('样本外') }}——前者相当于练习册，后者才是模拟考，<b>优先看样本外</b>。<br>
+    表格里<b>失败案例一条都没藏</b>，这是刻意的：只看成功的例子没有意义。
+  </div>
+</div>
+
 <div class="panel">
-  <h2>历史回测</h2>
-  <div style="margin-bottom:14px">
-    {% for m, name in market_names.items() %}
-    <button class="btn {{ 'active' if m == market }}" onclick="location.href='/backtest?market={{ m }}'">{{ name }}</button>
+  <div class="panel-hd">
+    <h2>回测参数</h2>
+    <span class="hint muted">这一轮统计用的是哪套设置</span>
+    <div class="right btns">
+      {% for m, name in market_names.items() %}
+      <button class="btn {{ 'on' if m == market }}" onclick="location.href='/backtest?market={{ m }}'">{{ name }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if run and stats %}
+  <div class="stat-grid">
+    <div class="stat"><div class="k">{{ tip('运行编号') }}</div><div class="v sm">第 {{ run.id }} 次</div></div>
+    <div class="stat"><div class="k">用的是哪段数据</div>
+      <div class="v sm">{{ {'train':'训练期（练习册）','oos':'样本外（模拟考）','full':'全部历史'}.get(run.sample_tag, run.sample_tag) }}</div></div>
+    <div class="stat"><div class="k">{{ tip('回测区间') }}</div><div class="v sm">{{ run.period_start }} ~ {{ run.period_end }}</div></div>
+    <div class="stat"><div class="k">恐慌分数线</div><div class="v sm">分数 ≤ {{ run.params.extreme_panic }}</div></div>
+    <div class="stat"><div class="k">过热分数线</div><div class="v sm">分数 ≥ {{ run.params.extreme_hot }}</div></div>
+    <div class="stat"><div class="k">{{ tip('反弹确认幅度') }}</div><div class="v sm">≥ {{ '%.1f%%'|format(run.params.rebound_pct * 100) }} 才算</div></div>
+    <div class="stat"><div class="k">{{ tip('确认窗口') }}</div><div class="v sm">往后看 {{ run.params.confirm_window }} 天</div></div>
+  </div>
+
+  {% if runs|length > 1 %}
+  <div class="btns" style="margin-top:14px; padding-top:13px; border-top:1px solid var(--line-1)">
+    <span class="lb">换一轮看</span>
+    {% for r in runs[:8] %}
+    {% set tag_cn = {'train':'训练期','oos':'样本外','full':'全部历史'}.get(r.sample_tag, r.sample_tag) %}
+    <button class="btn {{ 'on' if r.id == run.id }}"
+            onclick="location.href='/backtest?market={{ market }}&run_id={{ r.id }}'">第{{ r.id }}次 · {{ tag_cn }}</button>
     {% endfor %}
   </div>
-  {% if run and stats %}
-  <p class="muted">
-    run #{{ run.id }} ｜ 样本：{{ {'train':'训练区间','oos':'样本外','full':'全量'}.get(run.sample_tag, run.sample_tag) }} ｜ 区间：{{ run.period_start }} ~ {{ run.period_end }} ｜
-    参数：恐慌≤{{ run.params.extreme_panic }}，过热≥{{ run.params.extreme_hot }}，
-    反弹/回落≥{{ '%.1f%%'|format(run.params.rebound_pct * 100) }}，
-    确认窗口 {{ run.params.confirm_window }} 日
-  </p>
-  {% if runs|length > 1 %}
-  <p style="margin-top:8px">切换记录：
-    {% for r in runs[:8] %}
-    {% set tag_cn = {'train':'训练区间','oos':'样本外','full':'全量'}.get(r.sample_tag, r.sample_tag) %}
-    <button class="btn {{ 'active' if r.id == run.id }}" onclick="location.href='/backtest?market={{ market }}&run_id={{ r.id }}'">#{{ r.id }} {{ tag_cn }}</button>
-    {% endfor %}
-  </p>
+  {% endif %}
   {% endif %}
 </div>
 
+{% if run and stats %}
 <div class="cards">
-  {% for key, label in [('panic', '极端恐慌 → 阶段底部'), ('hot', '极端过热 → 阶段顶部')] %}
+  {% for key, label, kind in [('panic', '极端恐慌 → 是不是真的见底了', '底部'), ('hot', '极端过热 → 是不是真的见顶了', '顶部')] %}
   {% set s = stats[key] %}
   <div class="card">
-    <h3>{{ label }}</h3>
+    <div class="hd">
+      <span class="nm">{{ label }}</span>
+      <span class="dt">信号后 3 天内</span>
+    </div>
+
     {% if not s.sample_enough %}
-    <p class="sig-hot">样本不足，暂不能验证90%命中率（当前 {{ s.signals }} 次）</p>
-    {% else %}
-    <div class="score" style="color: {{ '#4ecb8f' if s.hit_rate >= 0.9 else '#f16d6d' }}">
-      {{ '%.0f%%'|format(s.hit_rate * 100) }}</div>
+    <div class="note-bar warn" style="margin:0">
+      {{ s.note or '样本不足' }}（目前只有 {{ s.signals }} 次信号，百分比看看就好，别当真）
+    </div>
     {% endif %}
-    <table style="margin-top:10px">
-      <tr><td>信号总数</td><td>{{ s.signals }}{% if s.unconfirmed %}（+{{ s.unconfirmed }} 未确认）{% endif %}</td></tr>
-      <tr><td>成功 / 失败</td><td>{{ s.success }} / {{ s.fail }}</td></tr>
-      <tr><td>T+0 命中率</td><td>{{ '%.0f%%'|format(s.t0_rate * 100) if s.t0_rate is not none else '—' }}（{{ s.t0_hits }}次）</td></tr>
-      <tr><td>T+1 命中率</td><td>{{ '%.0f%%'|format(s.t1_rate * 100) if s.t1_rate is not none else '—' }}（{{ s.t1_hits }}次）</td></tr>
-      <tr><td>T+2 命中率</td><td>{{ '%.0f%%'|format(s.t2_rate * 100) if s.t2_rate is not none else '—' }}（{{ s.t2_hits }}次）</td></tr>
-      <tr><td>T+0~T+2 累计</td><td><b>{{ '%.0f%%'|format(s.hit_rate * 100) if s.hit_rate is not none else '—' }}</b></td></tr>
-      <tr><td>信号覆盖率</td><td>{{ '%.1f%%'|format(s.coverage * 100) if s.coverage is not none else '—' }}</td></tr>
-      <tr><td>最大连续失败</td><td>{{ s.max_consec_fail }}</td></tr>
-    </table>
+
+    <div class="metric">
+      <span class="val" style="color:{{ 'var(--down)' if s.hit_rate is not none and s.hit_rate >= 0.9 else ('var(--tx-1)' if s.hit_rate is not none else 'var(--tx-3)') }}">
+        {{ '%.0f%%'|format(s.hit_rate * 100) if s.hit_rate is not none else '—' }}
+      </span>
+      <span class="badge plain">目标：十次对九次</span>
+    </div>
+    <div class="muted" style="font-size:11.5px; margin-top:-4px">
+      意思是：{{ s.signals }} 次信号里，有 {{ s.success }} 次在 3 天内真的见了{{ kind }}。
+    </div>
+
+    <div>
+      <div class="micro" style="margin-bottom:6px">逐天看：信号发出后第几天才见{{ kind }}</div>
+      {% for k, lab in [(0, '当天'), (1, '第2天'), (2, '第3天')] %}
+      {% set rate = s['t' ~ k ~ '_rate'] %}
+      {% set hits = s['t' ~ k ~ '_hits'] %}
+      <div class="tstep">
+        <span class="lbl" style="width:44px; flex:0 0 44px">{{ lab }}</span>
+        <span class="track">
+          <i style="width:{{ (rate * 100)|round(1) if rate is not none else 0 }}%;
+                    background:{{ 'var(--down)' if rate is not none and rate >= 0.9 else 'var(--acc)' }}"></i>
+        </span>
+        <span class="num">{{ '%.0f%%'|format(rate * 100) if rate is not none else '—' }}
+          <span class="muted" style="font-size:11px">({{ hits }} 次)</span></span>
+      </div>
+      {% endfor %}
+      <div class="muted" style="font-size:11.5px; margin-top:7px; line-height:1.6">
+        上表三行是<b>分别</b>统计的。卡片顶部那个大数字则是「三天里任意一天中就算对」的累计成绩，所以一定比单天高。
+      </div>
+    </div>
+
+    <div style="margin-top:2px">
+      <div class="kv"><span class="k">{{ tip('信号总数') }}</span>
+        <span class="v">{{ s.signals }}{% if s.unconfirmed %} <span class="muted">（另有 {{ s.unconfirmed }} 次还没走完，不算）</span>{% endif %}</span></div>
+      <div class="kv"><span class="k">对了 / 错了</span>
+        <span class="v"><span class="down">{{ s.success }}</span> <span class="muted">/</span> <span class="up">{{ s.fail }}</span></span></div>
+      <div class="kv"><span class="k">{{ tip('信号覆盖率') }}</span>
+        <span class="v">{{ '%.1f%%' % (s.coverage * 100) if s.coverage is not none else '—' }}</span></div>
+      <div class="kv"><span class="k">{{ tip('最大连续失败') }}</span>
+        <span class="v {{ 'up' if s.max_consec_fail >= 3 }}">{{ s.max_consec_fail }} 次</span></div>
+    </div>
+
+    {% if s.fwd %}
+    <div>
+      <div class="micro" style="margin:16px 0 7px">信号发出之后，市场平均怎么走</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th class="txt" title="信号后第几个交易日">多久以后</th>
+            <th title="这些信号之后市场平均涨跌幅（正数=方向对了）">信号后</th>
+            <th title="随便挑一天，同样天数后的平均涨跌幅">平时</th>
+            <th title="两者之差，就是信号带来的额外收益">多出来</th>
+            <th title="双尾置换检验。小于 0.05 才算站得住">双尾p</th>
+            <th class="txt">结论</th>
+          </tr></thead>
+          <tbody>
+          {% for h in [1, 3, 5, 10] %}
+          {# stats_json 经过 JSON 序列化，fwd 的键是字符串，两种都要兜住 #}
+          {% set r = s.fwd.get(h) or s.fwd.get(h|string) %}
+          {% if r %}
+          <tr>
+            <td class="txt">{{ h }} 个交易日后</td>
+            <td class="{{ 'down' if r.mean > 0 else 'up' }}">{{ '%+.2f%%'|format(r.mean * 100) }}</td>
+            <td class="muted">{{ '%+.2f%%'|format(r.base * 100) }}</td>
+            <td class="{{ 'down' if r.diff > 0 else 'up' }}"><b>{{ '%+.2f%%'|format(r.diff * 100) }}</b></td>
+            <td class="muted">{{ '%.3f'|format(r.p2) if r.p2 is not none else '—' }}</td>
+            <td class="txt">
+              {% if r.label == '明显好于平时' %}<span class="tag ok">明显好于平时</span>
+              {% elif r.label == '明显差于平时' %}<span class="tag no">明显差于平时</span>
+              {% elif r.label == '样本太少' %}<span class="tag wait">样本太少</span>
+              {% else %}<span class="muted">与平时无差别</span>{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="font-size:11.5px; margin-top:7px; line-height:1.7">
+        上面是「命中/没命中」之外的第二个角度：<b style="color:var(--tx-2)">不看对错，直接看涨了多少</b>。
+        它比二元的对错更灵敏 —— 同样 11 次信号，"对了几次"只有两种取值，
+        而"涨了百分之几"信息量大得多，所以更容易测出真实效果。
+      </p>
+    </div>
+    {% endif %}
+
+    <div>
+      <div class="micro" style="margin:16px 0 6px">这个成绩站得住吗</div>
+      {{ verdict_row(s, kind ~ '方向') }}
+      <p class="muted" style="font-size:11.5px; margin-top:7px; line-height:1.7">
+        「瞎猜」= 同一套判卷标准下，随便挑一天撞上{{ kind }}标签的概率。
+        只有命中率<b style="color:var(--tx-2)">明显高于它</b>、而且样本够多（双尾 p&lt;0.05），
+        才算真的有效。
+      </p>
+    </div>
   </div>
   {% endfor %}
 </div>
 
 <div class="panel">
-  <h2>信号明细（含失败案例，红色行为失败信号）</h2>
-  <div style="max-height:520px; overflow:auto">
-  <table>
-    <thead><tr>
-      <th>信号日期</th><th>类型</th><th>情绪</th><th>顶/底日期</th><th>偏差</th>
-      <th>T+0</th><th>T+1</th><th>T+2</th><th>最大反弹</th><th>最大回撤</th><th>结果</th>
-    </tr></thead>
-    <tbody>
-      {% for s in signals %}
-      <tr class="{{ 'fail-row' if s.success == 0 }}">
-        <td>{{ s.signal_date }}</td>
-        <td>{{ '极端恐慌' if s.signal_type == 'panic' else '极端过热' }}</td>
-        <td>{{ s.sentiment }}</td>
-        <td>{{ s.pivot_date or '—' }}</td>
-        <td>{{ s.lag if s.lag is not none else '—' }}</td>
-        <td>{{ '✓' if s.hit_t0 }}</td><td>{{ '✓' if s.hit_t1 }}</td><td>{{ '✓' if s.hit_t2 }}</td>
-        <td>{{ '%.2f%%'|format(s.max_rebound * 100) if s.max_rebound is not none else '—' }}</td>
-        <td>{{ '%.2f%%'|format(s.max_drawdown * 100) if s.max_drawdown is not none else '—' }}</td>
-        <td>{{ '未确认' if s.success is none else ('成功' if s.success else '失败') }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="panel-hd">
+    <h2>每一次信号的明细</h2>
+    <span class="hint muted">失败的一行都没删 · 共 {{ signals|length }} 条</span>
+  </div>
+  <div class="tbl-wrap scroll-y">
+    <table>
+      <thead><tr>
+        <th class="txt">信号日期</th><th class="txt">类型</th><th title="信号当天的情绪分">当天情绪分</th>
+        <th class="txt" title="实际出现的阶段低点或高点日期">实际见底/顶</th>
+        <th title="实际比信号晚几天">晚几天</th>
+        <th title="信号当天就命中了吗">当天</th><th title="第 2 个交易日命中了吗">第2天</th><th title="第 3 个交易日命中了吗">第3天</th>
+        <th title="期间最多涨了多少">最多涨</th><th title="期间最多跌了多少">最多跌</th><th class="txt">结果</th>
+      </tr></thead>
+      <tbody>
+        {% for s in signals %}
+        <tr class="{{ 'fail-row' if s.success == 0 else ('hit-row' if s.success == 1 else '') }}">
+          <td class="txt">{{ s.signal_date }}</td>
+          <td class="txt"><span class="tag {{ 'ok' if s.signal_type == 'panic' else 'no' }}">{{ '极端恐慌' if s.signal_type == 'panic' else '极端过热' }}</span></td>
+          <td>{{ s.sentiment }}</td>
+          <td class="txt muted">{{ s.pivot_date or '—' }}</td>
+          <td>{{ s.lag if s.lag is not none else '—' }}</td>
+          <td>{% if s.hit_t0 %}<span class="down">✓</span>{% else %}<span class="muted">·</span>{% endif %}</td>
+          <td>{% if s.hit_t1 %}<span class="down">✓</span>{% else %}<span class="muted">·</span>{% endif %}</td>
+          <td>{% if s.hit_t2 %}<span class="down">✓</span>{% else %}<span class="muted">·</span>{% endif %}</td>
+          <td>{{ '%.2f%%'|format(s.max_rebound * 100) if s.max_rebound is not none else '—' }}</td>
+          <td>{{ '%.2f%%'|format(s.max_drawdown * 100) if s.max_drawdown is not none else '—' }}</td>
+          <td class="txt">
+            {% if s.success is none %}<span class="tag wait">还没走完</span>
+            {% elif s.success %}<span class="tag ok">对了</span>
+            {% else %}<span class="tag no">错了</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
 {% if versions %}
 <div class="panel">
-  <h2>模型版本</h2>
-  <table>
-    <thead><tr><th>版本</th><th>激活</th><th>训练区间</th><th>样本外区间</th><th>创建时间</th></tr></thead>
-    <tbody>
-      {% for v in versions %}
-      <tr><td>{{ v.version }}</td><td>{{ '✓' if v.is_active }}</td>
-          <td>{{ v.train_period }}</td><td>{{ v.oos_period }}</td><td>{{ v.created_at }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="panel-hd"><h2>历次调参版本</h2>
+    <span class="hint muted">每次调参都存一份，旧版本不会被覆盖，方便对比</span></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th class="txt">版本</th><th class="txt">状态</th><th class="txt">调参用的历史</th><th class="txt">留给检验的最近一年</th><th class="txt">生成时间</th></tr></thead>
+      <tbody>
+        {% for v in versions %}
+        <tr>
+          <td class="txt"><b>{{ v.version }}</b></td>
+          <td class="txt">{% if v.is_active %}<span class="tag ok">正在用</span>{% else %}<span class="muted">已归档</span>{% endif %}</td>
+          <td class="txt muted">{{ v.train_period }}</td>
+          <td class="txt muted">{{ v.oos_period }}</td>
+          <td class="txt muted">{{ v.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
+
 {% else %}
-<p class="muted">该市场暂无回测记录。请先执行：python run.py update --market {{ market }}，然后 python run.py optimize --market {{ market }}</p>
+<div class="panel">
+  <h2>这个市场还没有回测记录</h2>
+  <div class="empty">
+    请按顺序执行下面两条命令，先算出情绪分，再跑回测：<br>
+    <code>py run.py update --market {{ market }}</code> → <code>py run.py optimize --market {{ market }}</code>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

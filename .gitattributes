@@ -1,0 +1,5 @@
+# 只固定脚本类文件的换行符（shell 必须 LF，Windows 脚本必须 CRLF）。
+# 其余文件保持原样，避免引入大规模换行符改动。
+*.sh  text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

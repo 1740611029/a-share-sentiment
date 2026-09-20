@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% from "_verdict.html" import verdict_row %}
+{% block title %}模型回测{% endblock %}
+{% block pagetitle %}模型回测{% endblock %}
+{% block pagesub %}把某一套筛选条件单独拎出来看 · 信号后 10 天的命中情况、见底/见顶时间，以及不同行情下稳不稳{% endblock %}
+{% block head %}<style>
+.picker{display:flex; gap:22px; flex-wrap:wrap; align-items:center}
+.picker .grp{display:flex; align-items:center; gap:6px}
+</style>{% endblock %}
+
+{% block content %}
+{% macro stat_block(title, b, kind) %}
+{% set kind_label = '见底方向' if kind == 'panic' else '见顶方向' %}
+<div class="panel">
+  <div class="panel-hd">
+    <h2>{{ title }}</h2>
+    <span class="badge plain">{{ '预期见底' if kind == 'panic' else '预期见顶' }}</span>
+    <div class="right">
+      {% if b.note %}<span class="badge warn">{{ b.note }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid" style="margin-bottom:14px">
+    <div class="stat hl">
+      <div class="k">10天内{{ '见底' if kind == 'panic' else '见顶' }}的比例</div>
+      <div class="v" style="font-size:22px; color:{{ 'var(--down)' if b.hit_rate is not none and b.hit_rate >= 0.9 else 'var(--tx-1)' }}">
+        {{ '%.1f%%' % (b.hit_rate * 100) if b.hit_rate is not none else '—' }}
+      </div>
+    </div>
+    <div class="stat"><div class="k">{{ tip('信号总数') }}</div><div class="v">{{ b.signals }}</div></div>
+    <div class="stat"><div class="k">对了 / 错了</div><div class="v">{{ b.success }}<span class="muted"> / </span>{{ b.fail }}</div></div>
+    <div class="stat"><div class="k">{{ tip('未确认') }}</div><div class="v">{{ b.unconfirmed }}</div></div>
+    <div class="stat"><div class="k">{{ tip('平均低点时间') if kind == 'panic' else '平均几天见顶' }}</div>
+      <div class="v">{{ '第 %.1f 天' % b.avg_pivot_lag if b.avg_pivot_lag is not none else '—' }}</div></div>
+    <div class="stat"><div class="k">{{ '见底后平均能反弹' if kind == 'panic' else '见顶后平均回落' }}</div>
+      <div class="v {{ 'down' if kind == 'panic' else 'up' }}">{{ '%.2f%%' % (b.avg_max_rebound * 100) if b.avg_max_rebound is not none else '—' }}</div></div>
+    <div class="stat"><div class="k">{{ '但先要承受的跌幅' if kind == 'panic' else '但先要涨的幅度' }}</div>
+      <div class="v">{{ '%.2f%%' % (b.avg_max_risk * 100) if b.avg_max_risk is not none else '—' }}</div></div>
+    <div class="stat"><div class="k">{{ tip('盈亏比') }}</div>
+      <div class="v">{{ b.profit_loss_ratio if b.profit_loss_ratio is not none else '—' }}</div></div>
+    <div class="stat"><div class="k">{{ tip('最大连续失败') }}</div>
+      <div class="v {{ 'up' if b.max_consec_fail >= 3 }}">{{ b.max_consec_fail }} 次</div></div>
+  </div>
+
+  <div>
+    <div class="micro" style="margin:14px 0 6px">这个成绩站得住吗</div>
+    {{ verdict_row(b, kind_label) }}
+    <p class="muted" style="font-size:11.5px; margin-top:7px; line-height:1.7">
+      「瞎猜」= 随便挑一天、用<b style="color:var(--tx-2)">完全相同的判定标准</b>，命中的概率。
+      波段模型的判定比较宽松（10 天内出现极值 + 反向走够 3%），所以这个基线往往不低 ——
+      <b style="color:var(--tx-1)">不看基线的话，"命中率 66%"其实说明不了任何问题。</b>
+    </p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:16px">
+    <div>
+      <div class="micro" style="margin-bottom:8px">{{ '最低点' if kind == 'panic' else '最高点' }}出现在第几天</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th class="txt">时间</th><th>次数</th><th class="txt">占比</th></tr></thead>
+          <tbody>
+          {% for label, d in b.lag_distribution.items() %}
+          <tr><td class="txt">{{ label }}</td><td>{{ d.count }}</td>
+              <td class="txt">
+                {% if d.pct is not none %}
+                <span class="bar"><i style="width:{{ (d.pct * 100)|round(1) }}%"></i><span>{{ '%.0f%%' % (d.pct * 100) }}</span></span>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="micro" style="margin-bottom:8px">各年份表现</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th class="txt">年份</th><th>信号数</th><th>对了多少</th></tr></thead>
+          <tbody>
+          {% for y, d in b.yearly.items() %}
+          <tr><td class="txt">{{ y }}</td><td>{{ d.signals }}</td>
+              <td style="color:{{ 'var(--down)' if d.hit_rate >= 0.9 else 'var(--tx-1)' }}">{{ '%.0f%%' % (d.hit_rate * 100) }}</td></tr>
+          {% else %}
+          <tr><td colspan="3" class="muted">—</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="micro" style="margin-bottom:8px">{{ tip('市场状态') }}</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th class="txt">行情</th><th>信号数</th><th>对了多少</th></tr></thead>
+          <tbody>
+          {% for name, label in [('bull', '牛市'), ('sideways', '震荡市'), ('bear', '熊市')] %}
+          {% set d = b.regime.get(name) %}
+          <tr><td class="txt">{{ label }}</td>
+              <td>{{ d.signals if d else 0 }}</td>
+              <td>{% if d %}<span style="color:{{ 'var(--down)' if d.hit_rate >= 0.9 else 'var(--tx-1)' }}">{{ '%.0f%%' % (d.hit_rate * 100) }}</span>
+                  {% else %}<span class="muted">—</span>{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+<div class="note-bar">
+  <div>
+    <b style="color:var(--tx-1)">这里看的是「单独一套条件」的成绩</b><br>
+    同一批信号，用五道不同的门槛去筛，看哪一道筛出来的信号更靠谱。选好市场和模型后，下面两张卡片分别是
+    预期见底、预期见顶方向的成绩。<br>
+    提醒：命中率高不等于好用——<b>一定要连「信号总数」和「最大连续失败」一起看</b>。次数太少时百分比不作数。
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-hd">
+    <h2>先选要看的对象</h2>
+    <span class="hint muted">信号发出后往后看 10 个交易日</span>
+  </div>
+  <div class="picker">
+    <div class="grp"><span class="lb micro">市场</span>
+      <span class="btns">
+      {% for m, name in market_names.items() %}
+      <button class="btn {{ 'on' if market == m }}"
+              onclick="location.href='/swing/backtest?market={{ m }}&model={{ model }}&sample={{ sample }}'">{{ name }}</button>
+      {% endfor %}
+      </span>
+    </div>
+    <div class="grp"><span class="lb micro">筛选条件</span>
+      <span class="btns">
+      {% for code, meta in models.items() %}
+      <button class="btn {{ 'on' if model == code }}" title="{{ meta.name }}"
+              onclick="location.href='/swing/backtest?market={{ market }}&model={{ code }}&sample={{ sample }}'">{{ code }}</button>
+      {% endfor %}
+      </span>
+    </div>
+    <div class="grp"><span class="lb micro">统计范围</span>
+      <span class="btns">
+      {% for s, label in [('full', '全部历史'), ('oos', '最近1年（样本外）')] %}
+      <button class="btn {{ 'on' if sample == s }}"
+              title="{{ '把最近一年封存起来不参与调参，用它检验才可信' if s == 'oos' else '所有能拿到的历史数据' }}"
+              onclick="location.href='/swing/backtest?market={{ market }}&model={{ model }}&sample={{ s }}'">{{ label }}</button>
+      {% endfor %}
+      </span>
+    </div>
+  </div>
+  {% if models.get(model) %}
+  <p class="muted" style="margin-top:14px; padding-top:13px; border-top:1px solid var(--line-1); line-height:1.7">
+    <b style="color:var(--tx-1)">模型{{ model }} · {{ models[model].name }}</b><br>{{ models[model].desc }}
+  </p>
+  {% endif %}
+</div>
+
+{% if not run %}
+<div class="panel"><h2>这个组合还没有回测数据</h2>
+  <div class="empty">请先运行 <code>py run.py swing --market {{ market }}</code>，生成该市场的波段模型回测。</div>
+</div>
+{% else %}
+<div class="panel">
+  <div class="panel-hd">
+    <h2>{{ market_names[market] }} · 模型{{ model }}</h2>
+    <span class="badge plain">{{ models.get(model, {}).get('name', '') }}</span>
+  </div>
+  <div class="stat-grid">
+    <div class="stat"><div class="k">{{ tip('回测区间') }}</div><div class="v sm">{{ run.period_start }} ~ {{ run.period_end }}</div></div>
+    <div class="stat"><div class="k">用的是哪段数据</div><div class="v sm">{{ {'full':'全部历史','oos':'最近一年（样本外）'}.get(run.sample_tag, run.sample_tag) }}</div></div>
+    <div class="stat"><div class="k">{{ tip('观察窗口') }}</div><div class="v sm">信号后 1 ~ {{ run.stats.observe_window }} 天</div></div>
+    <div class="stat"><div class="k">{{ tip('反弹确认幅度') }}</div><div class="v sm">要反向走够 {{ '%.1f%%' % (run.params.confirm_pct * 100) }} 才算</div></div>
+    <div class="stat"><div class="k">跑出来的时间</div><div class="v sm">{{ run.created_at }}</div></div>
+  </div>
+</div>
+
+{{ stat_block('极端恐慌之后，有没有真的见底', run.stats.panic, 'panic') }}
+{{ stat_block('极端过热之后，有没有真的见顶', run.stats.hot, 'hot') }}
+
+<div class="panel">
+  <div class="panel-hd">
+    <h2>每一次信号的明细</h2>
+    <span class="hint muted">共 {{ signals|length }} 条 · 错了的一行是浅红底，对了的是浅绿底</span>
+  </div>
+  <div class="tbl-wrap scroll-y tbl-sticky">
+    <table>
+      <thead>
+        <tr class="grp-row">
+          <th class="txt" rowspan="2">信号日</th>
+          <th class="txt" colspan="3">信号本身</th>
+          <th colspan="5">窗口里的最低价（预期见底时看这组）</th>
+          <th colspan="5">窗口里的最高价（预期见顶时看这组）</th>
+          <th class="txt" rowspan="2">结果</th>
+        </tr>
+        <tr>
+          <th class="txt">预期方向</th><th title="信号当天的情绪分">当日情绪分</th><th title="信号当天收盘价">当天收盘</th>
+          <th title="往后 10 天的最低价">最低价</th><th class="txt">哪天</th><th title="信号后第几个交易日">第几天</th><th title="从信号日跌到低点跌了多少">先跌了</th><th title="低点之后最多反弹多少">后弹了</th>
+          <th title="往后 10 天的最高价">最高价</th><th class="txt">哪天</th><th title="信号后第几个交易日">第几天</th><th title="从信号日涨到高点涨了多少">先涨了</th><th title="高点之后最多回落多少">后落了</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in signals %}
+      <tr class="{{ 'fail-row' if s.hit == 0 else ('hit-row' if s.hit == 1 else '') }}">
+        <td class="txt">{{ s.signal_date }}</td>
+        <td class="txt"><span class="tag {{ 'ok' if s.signal_type == 'panic' else 'no' }}">{{ '预期见底' if s.signal_type == 'panic' else '预期见顶' }}</span></td>
+        <td>{{ s.sentiment }}</td>
+        <td>{{ s.t0_close or '—' }}</td>
+        <td>{{ s.win_min or '—' }}</td>
+        <td class="txt muted">{{ s.win_min_date or '—' }}</td>
+        <td>{{ '第 %s 天' % s.win_min_lag if s.win_min_lag is not none else '—' }}</td>
+        <td>{{ '%.2f%%' % (s.drop_t0_to_min * 100) if s.drop_t0_to_min is not none else '—' }}</td>
+        <td class="down">{{ '%.2f%%' % (s.rebound_after_min * 100) if s.rebound_after_min is not none else '—' }}</td>
+        <td>{{ s.win_max or '—' }}</td>
+        <td class="txt muted">{{ s.win_max_date or '—' }}</td>
+        <td>{{ '第 %s 天' % s.win_max_lag if s.win_max_lag is not none else '—' }}</td>
+        <td>{{ '%.2f%%' % (s.rise_t0_to_max * 100) if s.rise_t0_to_max is not none else '—' }}</td>
+        <td class="up">{{ '%.2f%%' % (s.drawdown_after_max * 100) if s.drawdown_after_max is not none else '—' }}</td>
+        <td class="txt">{% if s.hit is none %}<span class="tag wait">还没走完</span>
+            {% elif s.hit %}<span class="tag ok">对了</span>
+            {% else %}<span class="tag no">错了</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

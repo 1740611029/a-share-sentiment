@@ -73,6 +73,40 @@ CREATE TABLE IF NOT EXISTS backtest_signal (
     success INTEGER,             -- 1 成功 / 0 失败 / NULL 未确认
     FOREIGN KEY (run_id) REFERENCES backtest_run(id)
 );
+CREATE TABLE IF NOT EXISTS swing_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    market_type TEXT NOT NULL,
+    model_code TEXT NOT NULL,    -- A / B / C / D / E ...
+    sample_tag TEXT,             -- full / oos
+    period_start TEXT,
+    period_end TEXT,
+    params_json TEXT,
+    stats_json TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+CREATE TABLE IF NOT EXISTS swing_signal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    market_type TEXT NOT NULL,
+    model_code TEXT NOT NULL,
+    signal_type TEXT NOT NULL,   -- panic / hot
+    signal_date TEXT NOT NULL,
+    sentiment REAL,
+    t0_close REAL,
+    observe_end TEXT,            -- 观察窗口结束日（T+10 或数据末端）
+    win_min REAL,                -- T+0~T+10 最低价
+    win_min_date TEXT,           -- 最低点日期
+    win_min_lag INTEGER,         -- 最低点距离信号日（交易日）
+    win_max REAL,                -- T+0~T+10 最高价
+    win_max_date TEXT,           -- 最高点日期
+    win_max_lag INTEGER,         -- 最高点距离信号日（交易日）
+    drop_t0_to_min REAL,         -- 信号日 → 最低点跌幅（负值）
+    rebound_after_min REAL,      -- 最低点后最大反弹
+    rise_t0_to_max REAL,         -- 信号日 → 最高点涨幅
+    drawdown_after_max REAL,     -- 最高点后最大回撤（负值）
+    hit INTEGER,                 -- 1 命中 / 0 未命中 / NULL 未确认
+    FOREIGN KEY (run_id) REFERENCES swing_run(id)
+);
 """
 
 
@@ -206,6 +240,86 @@ class Database:
         row = self.conn.execute("SELECT * FROM backtest_run WHERE id=?",
                                 (run_id,)).fetchone()
         return dict(row) if row else None
+
+    # ---------------- 波段信号模型 ----------------
+    def save_swing_run(self, market_type: str, model_code: str,
+                       sample_tag: str, period: tuple[str, str],
+                       params: dict, stats: dict, signals: list[dict]) -> int:
+        """保存一套波段模型的回测结果。
+
+        同一 (市场, 模型, 样本) 只保留最新一次运行：重算结果是确定性的，
+        旧 run 及其信号先删除，避免历史页标记重复。
+        """
+        old = self.conn.execute(
+            "SELECT id FROM swing_run WHERE market_type=? AND model_code=? "
+            "AND sample_tag=?", (market_type, model_code, sample_tag)).fetchall()
+        for r in old:
+            self.conn.execute("DELETE FROM swing_signal WHERE run_id=?", (r["id"],))
+        self.conn.execute(
+            "DELETE FROM swing_run WHERE market_type=? AND model_code=? "
+            "AND sample_tag=?", (market_type, model_code, sample_tag))
+        cur = self.conn.execute(
+            "INSERT INTO swing_run (market_type, model_code, sample_tag, "
+            "period_start, period_end, params_json, stats_json) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (market_type, model_code, sample_tag, period[0], period[1],
+             json.dumps(params, ensure_ascii=False),
+             json.dumps(stats, ensure_ascii=False)))
+        run_id = cur.lastrowid
+        for s in signals:
+            self.conn.execute(
+                "INSERT INTO swing_signal (run_id, market_type, model_code, "
+                "signal_type, signal_date, sentiment, t0_close, observe_end, "
+                "win_min, win_min_date, win_min_lag, win_max, win_max_date, "
+                "win_max_lag, drop_t0_to_min, rebound_after_min, "
+                "rise_t0_to_max, drawdown_after_max, hit) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, market_type, model_code, s["signal_type"],
+                 s["signal_date"], s.get("sentiment"), s.get("t0_close"),
+                 s.get("observe_end"), s.get("win_min"), s.get("win_min_date"),
+                 s.get("win_min_lag"), s.get("win_max"), s.get("win_max_date"),
+                 s.get("win_max_lag"), s.get("drop_t0_to_min"),
+                 s.get("rebound_after_min"), s.get("rise_t0_to_max"),
+                 s.get("drawdown_after_max"),
+                 None if s.get("hit") is None else int(s["hit"])))
+        self.conn.commit()
+        return run_id
+
+    def list_swing_runs(self, market_type: str | None = None) -> pd.DataFrame:
+        sql = "SELECT * FROM swing_run"
+        params: list = []
+        if market_type:
+            sql += " WHERE market_type=?"
+            params.append(market_type)
+        sql += " ORDER BY market_type, model_code"
+        return pd.read_sql(sql, self.conn, params=params)
+
+    def get_swing_run(self, run_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM swing_run WHERE id=?",
+                                (run_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_swing_run_signals(self, run_id: int) -> pd.DataFrame:
+        return pd.read_sql(
+            "SELECT * FROM swing_signal WHERE run_id=? ORDER BY signal_date",
+            self.conn, params=(run_id,))
+
+    def get_swing_signals(self, market_type: str | None = None,
+                          start: str | None = None,
+                          end: str | None = None) -> pd.DataFrame:
+        sql = "SELECT * FROM swing_signal WHERE 1=1"
+        params: list = []
+        if market_type:
+            sql += " AND market_type=?"
+            params.append(market_type)
+        if start:
+            sql += " AND signal_date>=?"
+            params.append(start)
+        if end:
+            sql += " AND signal_date<=?"
+            params.append(end)
+        sql += " ORDER BY signal_date"
+        return pd.read_sql(sql, self.conn, params=params)
 
     def close(self):
         self.conn.close()

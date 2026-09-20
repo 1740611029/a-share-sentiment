@@ -20,6 +20,19 @@ data/cache/
 *.tmp
 *.bak
 
+# ---------- 运行产物 ----------
+# 每日更新脚本的日志
+data/logs/
+# 改库前的手动备份
+data/backup/
+# SQLite 写库时产生的临时文件
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ---------- 本地 Agent 工作区（非项目源码） ----------
+.workbuddy-ai/
+
 # ---------- 编辑器 / 操作系统 ----------
 .idea/
 .vscode/

@@ -41,7 +41,9 @@ filters:
   exclude_st: true               # 排除 ST / *ST
   exclude_delisting: true        # 排除退市整理（名称含"退"）
   min_list_days: 90              # 上市不足 90 个自然日的新股排除
-  min_history_days: 250          # 历史数据不足 250 根的，不参与宽度类因子
+  # 注：不再需要 min_history_days。宽度类因子（above_ma20/60/120/250 等）的分母
+  # 是 col.notna().sum()，历史不足的股票本身是 NaN，已被自动排除出分母，
+  # 无需再按"上市天数"额外过滤。此前该键从未被任何代码引用（死配置），已移除。
   min_pool_ratio: 0.3            # 当日可统计股票数 < 股票池30% 视为数据异常
 
 # ---------- 各板块涨跌停幅度(%) ----------
@@ -83,23 +85,41 @@ sentiment:
   new_highlow_window: 250        # 创新高/新低窗口
 
 # ---------- 回测 ----------
+# 说明：pivot_left / confirm_window / rebound_pct / pos_tol 共同定义"阶段顶/底"这个
+# 客观基准（判卷标准），它们不参与参数优化，改动后需重跑 optimize 与 backtest。
 backtest:
   observe_lags: [0, 1, 2]        # T+0 / T+1 / T+2
   pivot_mode: zone               # 顶/底定义：zone(价格位置+确认反弹) / strict(精确局部极值)
-  pos_tol: 0.02                  # zone 模式价格位置容差（相对前 pivot_left 日极值）
+  pos_tol: 0.02                  # zone 模式价格位置容差（相对前 pivot_left 日极值）——固定，不参与优化
   pivot_left: 5                  # 顶/底判定：左侧窗口（交易日）
   confirm_window: 10             # 顶/底判定：右侧确认窗口（交易日）
-  rebound_pct: 0.03              # 阶段反弹/回落最小幅度
+  rebound_pct: 0.03              # 阶段反弹/回落最小幅度 ——固定，不参与优化（1% 过松）
   signal_cooldown: 3             # 信号去重冷却期（交易日）
   train_exclude_recent_days: 365 # 最近 1 年作为样本外，不参与参数优化
   min_samples: 5                 # 最低有效样本数（低于此值显示样本不足）
   walk_forward_folds: 3          # walk-forward 折数
 
+# ---------- 波段信号模型（新增独立模块，不影响原情绪指标） ----------
+swing:
+  observe_window: 10           # 信号日后观察窗口（交易日）：T+0 ~ T+10
+  signal_cooldown: 5           # 同一模型同方向信号冷却期（交易日）
+  confirm_pct: 0.03            # 阶段低点确认：最低点后反弹幅度；阶段高点：最高点后回撤幅度
+  reversal_lookback: 5         # 模型B/E：极端情绪回看窗口（交易日）
+  reversal_delta: 5            # 模型B：情绪自极端值回升/回落幅度（分）
+  exit_zone_low: 40            # 模型B：底部触发时分数仍须 <= 该值
+  exit_zone_high: 60           # 模型B：顶部触发时分数仍须 >= 该值
+  index_confirm_ret: 0.0       # 模型C：指数当日涨跌幅 >= 该值视为止跌（顶部镜像）
+  composite_index_tol: 0.01    # 模型E：指数确认容差（底部允许指数小跌 1% 以内）
+  min_samples: 5               # 最低有效样本数
+
 # ---------- 参数自动优化搜索空间 ----------
+# 重要：顶/底判定标准（backtest.rebound_pct、backtest.pos_tol）**刻意不参与优化**。
+# 它相当于"判卷标准"，若也可调，优化器会把它调到最松的一档
+# （历史上三个市场都收敛到 rebound=1%，导致 44%~52% 的交易日被判为"阶段底部"，
+#  命中率被系统性抬高 —— A股 报告 84% 而随机瞎猜也有 70%）。
+# 因此标签定义固定为 backtest.rebound_pct / backtest.pos_tol，只优化信号侧参数。
 optimize:
   panic_thresholds: [3, 4, 5, 6, 8, 10, 12, 15]
   hot_thresholds: [85, 88, 90, 92, 94, 95, 97]
-  rebound_pcts: [0.01, 0.015, 0.02, 0.03, 0.05]
-  pos_tols: [0.0, 0.01, 0.02, 0.03]
   weight_random_trials: 1200     # 权重随机搜索次数
   stability_penalty: 0.5         # walk-forward 命中率标准差惩罚系数

@@ -6,53 +6,483 @@
 <title>{% block title %}A股情绪指标系统{% endblock %}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-         background: #0f1420; color: #e6e9f0; min-height: 100vh; }
-  nav { background: #161d2e; padding: 14px 28px; display: flex; gap: 26px;
-        align-items: center; border-bottom: 1px solid #263050; }
-  nav .brand { font-weight: 700; font-size: 17px; color: #7ea6ff; }
-  nav a { color: #aab4d0; text-decoration: none; font-size: 14px; }
-  nav a.active, nav a:hover { color: #fff; }
-  main { padding: 24px 28px; max-width: 1280px; margin: 0 auto; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-           gap: 18px; margin-bottom: 26px; }
-  .card { background: #1a2236; border: 1px solid #2a3654; border-radius: 12px;
-          padding: 20px 22px; }
-  .card h3 { font-size: 15px; color: #aab4d0; margin-bottom: 10px; }
-  .score { font-size: 44px; font-weight: 700; line-height: 1.1; }
-  .level-badge { display: inline-block; padding: 3px 12px; border-radius: 20px;
-                 font-size: 13px; color: #10131c; font-weight: 600; margin-top: 8px; }
-  .muted { color: #7d879e; font-size: 13px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #242e48; }
-  th { color: #8fa0c4; font-weight: 600; background: #1a2236; position: sticky; top: 0; }
-  td:first-child, th:first-child { text-align: left; }
-  .panel { background: #161d2e; border: 1px solid #263050; border-radius: 12px;
-           padding: 18px 20px; margin-bottom: 22px; }
-  .panel h2 { font-size: 16px; margin-bottom: 14px; color: #c7d2ec; }
-  .btn { background: #263050; color: #cfd8ee; border: none; padding: 6px 16px;
-         border-radius: 8px; cursor: pointer; font-size: 13px; margin-right: 8px; }
-  .btn.active { background: #3d64d8; color: #fff; }
-  .tag-up { color: #f16d6d; } .tag-down { color: #4ecb8f; }
-  .sig-panic { color: #4ecb8f; font-weight: 700; }
-  .sig-hot { color: #f16d6d; font-weight: 700; }
-  .fail-row { background: rgba(214, 51, 108, .12); }
-  #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
-           justify-content: center; align-items: center; z-index: 99; }
-  #modal .box { background: #1a2236; border: 1px solid #3a4a74; border-radius: 12px;
-                padding: 24px 28px; min-width: 380px; }
-  #modal .box h3 { margin-bottom: 12px; }
-  #modal .box p { margin: 5px 0; font-size: 14px; }
+/* ============================================================
+   设计令牌 — 深色专业金融终端
+   取色基因参考 Kraken（紫色主色 / 冷灰中性 / 发丝级描边），
+   按暗色环境提亮并降低饱和度；红涨绿跌遵循 A 股惯例。
+   ============================================================ */
+:root{
+  --bg-0:#0B0D12; --bg-1:#11141B; --bg-2:#171B24; --bg-3:#1E2330; --bg-inset:#0E1117;
+  --line-1:#1E2330; --line-2:#2A3140; --line-3:#3A4356;
+  --tx-1:#E6E9F0; --tx-2:#9AA3B8; --tx-3:#6B7489;
+  --acc:#8B5CF6; --acc-hi:#A78BFA; --acc-bg:rgba(139,92,246,.14);
+  --up:#FF6161; --down:#2BD98A; --warn:#FBBF24;
+  --font-sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans CJK SC",
+              system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono","Cascadia Mono","Roboto Mono",Consolas,ui-monospace,monospace;
+  --r-sm:5px; --r-md:8px; --r-lg:12px;
+  --sb:226px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--font-sans); font-size:13px; line-height:1.55;
+  background:var(--bg-0); color:var(--tx-1);
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+::selection{background:var(--acc-bg); color:#fff}
+a{color:var(--acc-hi); text-decoration:none}
+a:hover{text-decoration:underline}
+/* 滚动条：终端式细条 */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--line-3)}
+
+/* ============================ 布局骨架 ============================ */
+.app{display:flex; min-height:100vh}
+
+.sidebar{
+  width:var(--sb); flex:0 0 var(--sb); position:sticky; top:0; height:100vh;
+  background:var(--bg-1); border-right:1px solid var(--line-1);
+  display:flex; flex-direction:column; overflow-y:auto; z-index:20;
+}
+.brand{padding:20px 20px 18px; border-bottom:1px solid var(--line-1)}
+.brand .mk{display:flex; align-items:center; gap:9px; font-size:14px; font-weight:500; letter-spacing:.01em}
+.brand .mk i{
+  width:20px;height:20px;flex:0 0 20px;border-radius:5px;background:var(--acc);
+  display:grid;place-items:center;font-style:normal;font-size:11px;color:#fff;font-family:var(--font-mono)
+}
+.brand .sub{font-size:10.5px;color:var(--tx-3);margin-top:7px;letter-spacing:.06em;
+            text-transform:uppercase;font-family:var(--font-mono)}
+
+.nav{padding:14px 0 20px; flex:1}
+.nav .grp{
+  padding:14px 20px 6px; font-size:10px; font-family:var(--font-mono);
+  color:var(--tx-3); letter-spacing:.12em; text-transform:uppercase;
+}
+.nav a{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 20px 8px 17px; color:var(--tx-2); font-size:13px;
+  border-left:3px solid transparent; transition:color .16s,background .16s;
+}
+.nav a:hover{color:var(--tx-1); background:var(--bg-2); text-decoration:none}
+.nav a.on{color:#fff; background:var(--bg-2); border-left-color:var(--acc); font-weight:500}
+.nav a .k{font-family:var(--font-mono); font-size:10px; color:var(--tx-3); letter-spacing:.04em}
+.nav a.on .k{color:var(--acc-hi)}
+
+.side-foot{padding:14px 20px 18px; border-top:1px solid var(--line-1); font-size:11px; color:var(--tx-3)}
+.side-foot .lg{display:flex; align-items:center; gap:6px; margin-top:7px}
+.side-foot .sw{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column}
+
+/* ---------------------------- 顶栏状态条 ---------------------------- */
+.topbar{
+  position:sticky; top:0; z-index:15;
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  padding:13px 26px; background:rgba(11,13,18,.86);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--line-1);
+}
+.topbar .ttl{display:flex; align-items:baseline; gap:10px; min-width:0}
+.topbar h1{font-size:15px; font-weight:500; letter-spacing:.01em; white-space:nowrap}
+.topbar .desc{font-size:12px; color:var(--tx-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.topbar .right{margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+
+.chip{
+  display:inline-flex; align-items:center; gap:7px; padding:4px 10px 4px 8px;
+  border:1px solid var(--line-2); border-radius:var(--r-sm);
+  background:var(--bg-2); font-size:11.5px; white-space:nowrap;
+}
+.chip .dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.chip .nm{color:var(--tx-3)}
+.chip .vl{font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--tx-1); font-weight:500}
+.chip.stale{border-color:rgba(251,191,36,.34); background:rgba(251,191,36,.08)}
+.chip.stale .vl{color:var(--warn)}
+.stamp{font-family:var(--font-mono); font-size:11px; color:var(--tx-3); letter-spacing:.03em}
+
+.content{padding:22px 26px 44px; max-width:1560px; width:100%}
+
+/* ============================ 排版工具 ============================ */
+.micro{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--tx-3); font-weight:400;
+}
+.n{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+.muted{color:var(--tx-3)}
+.dim{color:var(--tx-2)}
+.up{color:var(--up)} .down{color:var(--down)}
+.sig-panic{color:var(--down); font-weight:500}
+.sig-hot{color:var(--up); font-weight:500}
+code{
+  font-family:var(--font-mono); font-size:11.5px; background:var(--bg-3);
+  border:1px solid var(--line-1); border-radius:4px; padding:1px 5px; color:var(--acc-hi)
+}
+
+/* ---------------------- 术语悬浮解释（大白话） ---------------------- */
+.term{
+  border-bottom:1px dashed var(--line-3); cursor:help;
+  transition:color .16s ease-out, border-color .16s ease-out;
+}
+.term:hover,.term:focus-visible{color:var(--acc-hi); border-bottom-color:var(--acc); outline:none}
+#tip{
+  display:none; position:fixed; z-index:300; max-width:min(340px,86vw);
+  background:var(--bg-2); border:1px solid var(--line-3); border-radius:var(--r-md);
+  padding:10px 13px; font-size:12.5px; line-height:1.75; color:var(--tx-2);
+  font-family:var(--font-sans); font-weight:400; text-transform:none; letter-spacing:0;
+  white-space:normal; text-align:left;
+  box-shadow:0 14px 36px rgba(0,0,0,.62); pointer-events:none;
+  opacity:0; transition:opacity .14s ease-out;
+}
+#tip.on{opacity:1}
+#tip::after{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:2px;
+  background:var(--acc); border-radius:var(--r-md) 0 0 var(--r-md);
+}
+
+/* ============================ 面板 / 卡片 ============================ */
+.panel{
+  background:var(--bg-1); border:1px solid var(--line-1); border-radius:var(--r-lg);
+  padding:18px 20px; margin-bottom:18px;
+}
+.panel > h2{
+  font-size:13.5px; font-weight:500; color:var(--tx-1);
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:14px;
+}
+.panel > h2 .hint{font-size:11.5px; color:var(--tx-3); font-weight:400}
+.panel-hd{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px}
+.panel-hd h2{font-size:13.5px; font-weight:500; margin:0}
+.panel-hd .right{margin-left:auto}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:18px}
+
+.card{
+  background:var(--bg-1); border:1px solid var(--line-1); border-radius:var(--r-lg);
+  padding:18px 20px; display:flex; flex-direction:column; gap:12px;
+}
+.card .hd{display:flex; align-items:center; gap:9px}
+.card .hd .nm{font-size:13.5px; font-weight:500}
+.card .hd .dt{margin-left:auto; font-family:var(--font-mono); font-size:11px; color:var(--tx-3)}
+
+/* 主指标：分数 + 状态 */
+.metric{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
+.metric .val{
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+  font-size:46px; line-height:1; font-weight:500; letter-spacing:-.02em;
+}
+.metric .val.sm{font-size:34px}
+.badge{
+  display:inline-block; padding:3px 10px; border-radius:var(--r-sm);
+  font-size:11.5px; font-weight:500; border:1px solid transparent; white-space:nowrap;
+}
+.badge.plain{background:var(--bg-3); border-color:var(--line-2); color:var(--tx-2)}
+.badge.warn{background:rgba(251,191,36,.12); border-color:rgba(251,191,36,.32); color:var(--warn)}
+
+/* 指标网格 */
+.stat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:8px}
+.stat{background:var(--bg-inset); border:1px solid var(--line-1); border-radius:var(--r-md); padding:9px 11px}
+.stat .k{font-size:10.5px; color:var(--tx-3); letter-spacing:.02em; white-space:nowrap;
+         overflow:hidden; text-overflow:ellipsis}
+.stat .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+         font-size:17px; font-weight:500; margin-top:3px; line-height:1.2}
+.stat .v.sm{font-size:14px}
+.stat.hl{border-color:var(--line-2); background:var(--bg-2)}
+
+/* 键值行 */
+.kv{display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    padding:6px 0; border-bottom:1px solid var(--line-1); font-size:12.5px}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--tx-3)}
+.kv .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums; text-align:right}
+
+/* 提示条 */
+.note-bar{
+  display:flex; gap:10px; align-items:flex-start;
+  background:var(--bg-2); border:1px solid var(--line-2); border-left:2px solid var(--acc);
+  border-radius:var(--r-md); padding:11px 15px; font-size:12.5px;
+  color:var(--tx-2); line-height:1.65; margin-bottom:18px;
+}
+.note-bar.warn{border-left-color:var(--warn); background:rgba(251,191,36,.06);
+               border-color:rgba(251,191,36,.22); color:#E8CFA0}
+
+/* ------------------ 统计显著性结论条（共用） ------------------ */
+.vr{display:flex; align-items:flex-start; gap:9px; margin-top:7px; padding:8px 11px;
+    border-radius:var(--r-md); border:1px solid var(--line-1); background:var(--bg-inset);
+    font-size:11.5px; line-height:1.65; color:var(--tx-2)}
+.vr .ic{flex:0 0 16px; height:16px; border-radius:4px; display:grid; place-items:center;
+        font-size:10px; font-weight:600; font-family:var(--font-mono); margin-top:1px}
+.vr .lab{font-weight:500; display:block; margin-bottom:2px}
+.vr.good{border-color:rgba(43,217,138,.3); background:rgba(43,217,138,.07)}
+.vr.good .ic{background:rgba(43,217,138,.2); color:var(--down)}
+.vr.good .lab{color:var(--down)}
+.vr.bad{border-color:rgba(255,97,97,.3); background:rgba(255,97,97,.07)}
+.vr.bad .ic{background:rgba(255,97,97,.2); color:var(--up)}
+.vr.bad .lab{color:var(--up)}
+.vr.weak{border-color:rgba(251,191,36,.26); background:rgba(251,191,36,.05)}
+.vr.weak .ic{background:rgba(251,191,36,.16); color:var(--warn)}
+.vr.weak .lab{color:var(--warn)}
+.vr.na{border-color:var(--line-2); background:var(--bg-2)}
+.vr.na .ic{background:var(--bg-3); color:var(--tx-3)}
+.vr.na .lab{color:var(--tx-2)}
+.vcmp{display:flex; gap:14px; flex-wrap:wrap; font-family:var(--font-mono);
+      font-size:11px; color:var(--tx-3); margin-top:3px}
+
+/* ============================ 按钮组 ============================ */
+.btns{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.btns .lb{font-size:10px; font-family:var(--font-mono); letter-spacing:.12em;
+          text-transform:uppercase; color:var(--tx-3); margin-right:2px}
+.btn{
+  background:var(--bg-2); color:var(--tx-2); border:1px solid var(--line-1);
+  padding:5px 12px; border-radius:var(--r-sm); cursor:pointer;
+  font-size:12px; font-family:inherit; transition:all .16s ease-out; line-height:1.5;
+}
+.btn:hover{color:var(--tx-1); border-color:var(--line-3); background:var(--bg-3)}
+.btn.on{background:var(--acc-bg); color:var(--acc-hi); border-color:rgba(139,92,246,.42); font-weight:500}
+.btn.on:hover{background:rgba(139,92,246,.2)}
+.btn:focus-visible{outline:2px solid var(--acc); outline-offset:1px}
+
+/* ============================ 表格 ============================ */
+.tbl-wrap{
+  overflow:auto; border:1px solid var(--line-1); border-radius:var(--r-md);
+  background:var(--bg-inset);
+}
+.tbl-wrap.scroll-y{max-height:540px}
+table{width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px}
+thead th{
+  position:sticky; top:0; z-index:3;
+  background:var(--bg-2); color:var(--tx-3);
+  font-size:10.5px; font-weight:500; letter-spacing:.06em; text-transform:uppercase;
+  text-align:right; padding:9px 11px; white-space:nowrap;
+  border-bottom:1px solid var(--line-2);
+}
+tbody td{
+  padding:8px 11px; text-align:right; white-space:nowrap;
+  border-bottom:1px solid var(--line-1); color:var(--tx-1);
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+}
+tbody tr:last-child td{border-bottom:0}
+tbody tr{transition:background .12s}
+tbody tr:hover td{background:var(--bg-2)}
+th:first-child,td:first-child{text-align:left}
+/* 中文文本列用无衬线，数字列保留等宽 */
+td.txt,th.txt{font-family:var(--font-sans); text-align:left}
+td.wrap,th.wrap{white-space:normal; min-width:150px}
+tfoot td{
+  padding:8px 11px; border-top:1px solid var(--line-2); background:var(--bg-2);
+  font-family:var(--font-mono); font-size:12px; color:var(--tx-2); text-align:right;
+}
+/* 首列吸附（宽表用） */
+.tbl-sticky th:first-child,.tbl-sticky td:first-child{
+  position:sticky; left:0; z-index:2; background:var(--bg-inset);
+  border-right:1px solid var(--line-2);
+}
+.tbl-sticky thead th:first-child{z-index:4; background:var(--bg-2)}
+.tbl-sticky tbody tr:hover td:first-child{background:var(--bg-2)}
+/* 表头分组 */
+thead tr.grp-row th{
+  background:var(--bg-1); border-bottom:1px solid var(--line-1);
+  color:var(--tx-3); font-size:10px; padding:7px 11px;
+}
+thead tr.grp-row th.panic{color:var(--down)}
+thead tr.grp-row th.hot{color:var(--up)}
+/* 双行表头：第二行贴在首行下方，避免吸顶重叠 */
+thead tr.grp-row + tr th{top:29px}
+/* 行状态 */
+tr.fail-row td{background:rgba(255,97,97,.07)}
+tr.fail-row:hover td{background:rgba(255,97,97,.11)}
+tr.hit-row td{background:rgba(43,217,138,.05)}
+/* 单元格内标签 */
+.tag{
+  display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px;
+  font-family:var(--font-sans); border:1px solid transparent; line-height:1.6;
+}
+.tag.ok{background:rgba(43,217,138,.13); border-color:rgba(43,217,138,.3); color:var(--down)}
+.tag.no{background:rgba(255,97,97,.13); border-color:rgba(255,97,97,.3); color:var(--up)}
+.tag.wait{background:var(--bg-3); border-color:var(--line-2); color:var(--tx-3)}
+.tag.acc{background:var(--acc-bg); border-color:rgba(139,92,246,.3); color:var(--acc-hi)}
+/* 迷你条形（占比） */
+.bar{display:inline-flex; align-items:center; gap:7px; justify-content:flex-end; width:100%}
+.bar i{height:4px; border-radius:2px; background:var(--acc); opacity:.7; min-width:2px; display:block}
+.bar span{font-family:var(--font-mono); font-size:11.5px; color:var(--tx-2); min-width:34px; text-align:right}
+
+/* ============================ 图表 ============================ */
+.chart-box{position:relative; height:330px; width:100%}
+.chart-box canvas{width:100%!important}
+
+/* ============================ 弹窗 ============================ */
+#modal{
+  display:none; position:fixed; inset:0; background:rgba(6,8,12,.72);
+  backdrop-filter:blur(3px); justify-content:center; align-items:center;
+  z-index:99; padding:24px;
+}
+#modal .box{
+  background:var(--bg-1); border:1px solid var(--line-3); border-radius:var(--r-lg);
+  padding:22px 24px; width:min(680px,100%); max-height:84vh; overflow-y:auto;
+  box-shadow:0 18px 48px rgba(0,0,0,.6);
+}
+#modal .box h3{
+  font-size:13.5px; font-weight:500; margin-bottom:14px; padding-bottom:11px;
+  border-bottom:1px solid var(--line-1); display:flex; align-items:center; gap:8px;
+}
+#modal .box p{margin:6px 0; font-size:12.5px; color:var(--tx-2); line-height:1.7}
+#modal .box b{color:var(--tx-1); font-weight:500}
+#modal .box .mcard{
+  background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--r-md);
+  padding:12px 14px; margin:9px 0;
+}
+#modal .box .mcard .mh{
+  display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+  margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line-1);
+}
+
+/* ============================ 空状态 ============================ */
+.empty{
+  border:1px dashed var(--line-2); border-radius:var(--r-md);
+  padding:28px 22px; text-align:center; color:var(--tx-3); font-size:12.5px; line-height:1.8;
+}
+
+/* ============================ 响应式 ============================ */
+@media (max-width:1080px){
+  .app{flex-direction:column}
+  .sidebar{
+    width:100%; flex:none; height:auto; position:sticky; top:0;
+    flex-direction:row; align-items:center; gap:0; overflow-x:auto;
+    border-right:0; border-bottom:1px solid var(--line-1); padding:0 10px;
+  }
+  .brand{border-bottom:0; padding:11px 14px 11px 6px; flex:0 0 auto}
+  .brand .sub{display:none}
+  .nav{display:flex; align-items:center; padding:0; flex:1; gap:2px}
+  .nav .grp{display:none}
+  .nav a{padding:9px 11px; border-left:0; border-bottom:2px solid transparent;
+         font-size:12.5px; white-space:nowrap}
+  .nav a.on{border-left-color:transparent; border-bottom-color:var(--acc)}
+  .nav a .k{display:none}
+  .side-foot{display:none}
+  .topbar{padding:11px 16px; gap:12px}
+  .topbar .desc{display:none}
+  .content{padding:16px 16px 40px}
+  .metric .val{font-size:38px}
+  .chart-box{height:260px}
+}
+@media (max-width:640px){
+  .cards{grid-template-columns:1fr}
+  .topbar .right{width:100%; margin-left:0}
+  .chip{flex:1 1 auto; justify-content:center}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  #modal{padding:12px}
+  #modal .box{padding:16px 16px}
+  .panel{padding:14px 14px}
+}
 </style>
+{% block head %}{% endblock %}
 </head>
 <body>
-<nav>
-  <span class="brand">A股三市场情绪指标</span>
-  <a href="/" class="{{ 'active' if request.path == '/' }}">实时首页</a>
-  <a href="/history" class="{{ 'active' if request.path == '/history' }}">情绪历史</a>
-  <a href="/backtest" class="{{ 'active' if request.path == '/backtest' }}">历史回测</a>
-</nav>
-<main>{% block content %}{% endblock %}</main>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mk"><i>A</i>A股情绪指标</div>
+      <div class="sub">Sentiment Terminal</div>
+    </div>
+    <nav class="nav">
+      <div class="grp">情绪指标</div>
+      <a href="/" class="{{ 'on' if request.path == '/' }}">情绪概览<span class="k">01</span></a>
+      <a href="/history" class="{{ 'on' if request.path == '/history' }}">情绪历史<span class="k">02</span></a>
+      <div class="grp">波段信号模型</div>
+      <a href="/swing" class="{{ 'on' if request.path == '/swing' }}">波段信号<span class="k">03</span></a>
+      <a href="/swing/backtest" class="{{ 'on' if request.path == '/swing/backtest' }}">模型回测<span class="k">04</span></a>
+      <a href="/swing/compare" class="{{ 'on' if request.path == '/swing/compare' }}">模型对比<span class="k">05</span></a>
+      <div class="grp">原有功能</div>
+      <a href="/backtest" class="{{ 'on' if request.path == '/backtest' }}">情绪回测<span class="k">06</span></a>
+      <div class="grp">帮助</div>
+      <a href="/glossary" class="{{ 'on' if request.path == '/glossary' }}">术语对照表<span class="k">07</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="micro">涨跌语义</div>
+      <div class="lg"><span class="sw" style="background:var(--up)"></span>红 · 上涨 / 过热</div>
+      <div class="lg"><span class="sw" style="background:var(--down)"></span>绿 · 下跌 / 恐慌</div>
+      <div class="lg" style="margin-top:11px; padding-top:10px; border-top:1px solid var(--line-1); line-height:1.6">
+        <span style="border-bottom:1px dashed var(--line-3)">带虚线的词</span>鼠标放上去有解释
+      </div>
+      <div class="lg"><a href="/glossary" style="color:var(--acc-hi)">术语对照表 →</a></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="ttl">
+        <h1>{% block pagetitle %}情绪概览{% endblock %}</h1>
+        <span class="desc">{% block pagesub %}{% endblock %}</span>
+      </div>
+      <div class="right">
+        {% if nav_meta and nav_meta.markets %}
+          {% for m, d in nav_meta.markets.items() %}
+          <span class="chip {{ 'stale' if nav_meta.lag and nav_meta.lag > 1 }}"
+                title="{{ d.date }} ｜ {{ d.level }}">
+            <span class="dot" style="background:{{ d.color }}"></span>
+            <span class="nm">{{ d.name }}</span>
+            <span class="vl">{{ d.score }}</span>
+          </span>
+          {% endfor %}
+        {% endif %}
+        {% if nav_meta and nav_meta.latest %}
+        <span class="stamp {{ 'up' if nav_meta.lag and nav_meta.lag > 1 }}"
+              title="数据日期 / 当前日期">DATA {{ nav_meta.latest }}{% if nav_meta.lag and nav_meta.lag > 1 %} · 滞后{{ nav_meta.lag }}天{% endif %}</span>
+        {% endif %}
+      </div>
+    </header>
+    <main class="content">{% block content %}{% endblock %}</main>
+  </div>
+
+</div>
+<script>
+/* 术语悬浮解释：鼠标移到带虚线的词上（手机点一下）弹出大白话说明 */
+(function () {
+  var tip = document.createElement('div');
+  tip.id = 'tip';
+  document.body.appendChild(tip);
+  var showing = false;
+
+  function place(x, y) {
+    var r = tip.getBoundingClientRect();
+    var L = x + 16, T = y + 20;
+    if (L + r.width > innerWidth - 12) L = innerWidth - r.width - 12;
+    if (T + r.height > innerHeight - 12) T = y - r.height - 14;
+    tip.style.left = Math.max(12, L) + 'px';
+    tip.style.top = Math.max(12, T) + 'px';
+  }
+  function show(el, x, y) {
+    var text = el.getAttribute('data-tip');
+    if (!text) return;
+    tip.textContent = text;
+    tip.style.display = 'block';
+    place(x, y);
+    requestAnimationFrame(function () { tip.classList.add('on'); });
+    showing = true;
+  }
+  function hide() {
+    if (!showing) return;
+    showing = false;
+    tip.classList.remove('on');
+    tip.style.display = 'none';
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el) show(el, e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (e.target.closest && e.target.closest('.term')) hide();
+  });
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('.term');
+    if (el) { e.preventDefault(); show(el, e.clientX, e.clientY); }
+    else hide();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+  addEventListener('scroll', hide, { passive: true });
+})();
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

@@ -4,6 +4,7 @@
   python run.py update    [--market A_SHARE CHINEXT STAR] [--limit N] [--refresh-list]
   python run.py optimize  [--market ...]
   python run.py backtest  [--market ...] [--sample full|train|oos]
+  python run.py swing     [--market ...] [--model A B C D E] [--sample full|oos]
   python run.py serve     [--port 5000]
 """
 from __future__ import annotations
@@ -39,6 +40,34 @@ def cmd_update(args):
         summary = compute_and_store(cfg, db, provider, m)
         print(f"[{m}] {MARKET_NAMES[m]} {summary['date']} "
               f"情绪 {summary['score']}（{summary['level']}）[{summary['version']}]")
+        _update_swing(cfg, db, provider, m)
+
+
+def _update_swing(cfg, db, provider, market: str):
+    """增量刷新波段信号（独立模块；失败不影响原情绪指标流程）。"""
+    try:
+        from sentisys.swing import run_swing
+        out = run_swing(cfg, db, provider, market, sample="full")
+        n = sum(out[c]["panic"]["signals"] + out[c]["hot"]["signals"]
+                for c in out)
+        print(f"[{market}] 波段信号已刷新（{len(out)} 套模型，{n} 个已确认信号）")
+    except Exception as e:  # noqa: BLE001
+        print(f"[{market}] 波段信号刷新失败（不影响情绪指标）: {e}")
+
+
+def cmd_swing(args):
+    from sentisys.swing import run_swing
+    cfg = load_config(args.config)
+    provider = DataProvider(cfg)
+    db = Database(cfg["data"]["db_path"])
+    for m in _markets(args):
+        out = run_swing(cfg, db, provider, m, sample=args.sample,
+                        models=args.model)
+        for code, stats in out.items():
+            p, h = stats["panic"], stats["hot"]
+            fmt = lambda b: (f"{b['hit_rate'] * 100:.1f}%" if b["hit_rate"] is not None else "—")
+            print(f"[{m}] 模型{code} 底部命中率 {fmt(p)} (n={p['signals']}) "
+                  f"顶部命中率 {fmt(h)} (n={h['signals']})")
 
 
 def cmd_optimize(args):
@@ -123,6 +152,13 @@ def main():
     p.add_argument("--market", nargs="*", choices=ALL_MARKETS)
     p.add_argument("--sample", choices=["full", "train", "oos"], default="full")
     p.set_defaults(func=cmd_backtest)
+
+    p = sub.add_parser("swing", help="波段信号模型回测（T+0~T+10 阶段低点/高点）")
+    p.add_argument("--market", nargs="*", choices=ALL_MARKETS)
+    p.add_argument("--model", nargs="*", choices=list("ABCDE"),
+                   default=None, help="只运行指定模型，默认全部")
+    p.add_argument("--sample", choices=["full", "oos"], default="full")
+    p.set_defaults(func=cmd_swing)
 
     p = sub.add_parser("serve", help="启动 Web 界面")
     p.add_argument("--port", type=int, default=5000)

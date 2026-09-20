@@ -1,12 +1,18 @@
 """参数自动优化 + walk-forward 验证 + 模型版本落库。
 
 防过拟合约束：
+  0. **顶/底判定标准固定不变**：rebound_pct、pos_tol、pivot_left、confirm_window
+     来自 config.backtest，不进入搜索空间。它们是"判卷标准"（客观标签），
+     若可调，优化器会倾向于把它放松以刷高命中率 —— 历史上三市场均收敛到
+     rebound=1%，使 44%~52% 的交易日被判为"阶段底部"，A股 报告 84% 而随机基线已达 70%。
   1. 最近 train_exclude_recent_days 天为样本外区间，优化过程完全不可见；
   2. 训练区间内按时间分 K 段做 walk-forward 稳定性检验；
   3. 目标函数 = min(恐慌方向得分, 过热方向得分)，
      方向得分 = 分段命中率均值 - stability_penalty × 分段标准差，
      样本数不足 min_samples 的方向直接记 0 分；
   4. 最终参数只在样本外区间评估一次并如实记录。
+
+只优化"信号侧"参数：恐慌/过热阈值、六大因子权重。
 """
 from __future__ import annotations
 
@@ -113,29 +119,31 @@ def optimize_market(cfg: dict, db, market: str, subscores: pd.DataFrame,
         if progress:
             print(msg)
 
-    # ---------- 阶段 1：默认权重，搜索阈值 × 反弹幅度 × 位置容差 ----------
-    log(f"[{market}] 阶段1：阈值×反弹幅度×位置容差网格搜索（训练期 {train_period[0]} ~ {train_period[1]}）")
+    # ---------- 顶/底判定标准：固定，不参与优化 ----------
+    fixed_pivots = pivots_for(base_params["rebound_pct"], base_params["pos_tol"])
+    log(f"[{market}] 顶/底判定标准固定：反弹≥{base_params['rebound_pct']:.1%}、"
+        f"位置容差{base_params['pos_tol']:.0%}（判卷标准不参与优化）")
+
+    # ---------- 阶段 1：默认权重，搜索恐慌/过热阈值 ----------
+    log(f"[{market}] 阶段1：阈值网格搜索（训练期 {train_period[0]} ~ {train_period[1]}）")
     best = (-1.0, None)
     score_default = compute_score(subscores, base_weights, cfg)
     for panic_t in opt["panic_thresholds"]:
         for hot_t in opt["hot_thresholds"]:
-            for rb in opt["rebound_pcts"]:
-                for pt in opt.get("pos_tols", [base_params["pos_tol"]]):
-                    p = {**base_params, "extreme_panic": panic_t,
-                         "extreme_hot": hot_t, "rebound_pct": rb, "pos_tol": pt,
-                         "_pivots": pivots_for(rb, pt)}
-                    val = _objective(score_default, close, p, folds, min_samples, stab_pen)
-                    if val > best[0]:
-                        best = (val, p)
+            p = {**base_params, "extreme_panic": panic_t,
+                 "extreme_hot": hot_t, "_pivots": fixed_pivots}
+            val = _objective(score_default, close, p, folds, min_samples, stab_pen)
+            if val > best[0]:
+                best = (val, p)
     best_params = best[1]
     log(f"  最优: 恐慌<={best_params['extreme_panic']} 过热>={best_params['extreme_hot']} "
-        f"反弹>={best_params['rebound_pct']:.1%} 位置容差={best_params['pos_tol']:.0%} 得分 {best[0]:.3f}")
+        f"得分 {best[0]:.3f}")
 
     # ---------- 阶段 2：固定阈值，随机搜索因子权重 ----------
     log(f"[{market}] 阶段2：因子权重随机搜索（{opt['weight_random_trials']} 次）")
     rng = np.random.default_rng(42)
     best_w = (best[0], base_weights)
-    best_params["_pivots"] = pivots_for(best_params["rebound_pct"], best_params["pos_tol"])
+    best_params["_pivots"] = fixed_pivots
     trials = [base_weights]
     for _ in range(int(opt["weight_random_trials"])):
         w = rng.dirichlet(np.ones(len(DEFAULT_WEIGHT_KEYS)) * 2.0)

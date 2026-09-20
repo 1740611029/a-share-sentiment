@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}波段信号{% endblock %}
+{% block pagetitle %}波段信号{% endblock %}
+{% block pagesub %}情绪跌到极端之后，接下来 10 天发生了什么 · 五套筛选条件各自的触发情况{% endblock %}
+{% block head %}<style>
+.mhead{display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;
+       padding-bottom:14px; border-bottom:1px solid var(--line-1); margin-bottom:16px}
+.mhead .meta{display:flex; flex-direction:column; gap:5px; margin-bottom:4px}
+</style>{% endblock %}
+
+{% block content %}
+<div class="note-bar warn">
+  <div>
+    <b style="color:var(--tx-1)">这一页只做历史统计，不是买卖建议</b><br>
+    逻辑很简单：情绪跌进极端区域后，往后看 10 个交易日，历史上有没有真的形成阶段性低点（或高点）。
+    下面五套筛选条件（A~E）就是五道不同的门槛，越往后越严格、信号越少。<br>
+    <span class="down">✓ 口径已统一</span>：本页的极端分数线与「情绪概览」页<b>完全一致</b>，
+    都取自各市场自动调参后的激活版本（每个市场下方会标出当前值），不再使用配置文件里的固定值。
+  </div>
+</div>
+
+{% if not cards or not cards[0].snap %}
+<div class="panel"><h2>暂无数据</h2>
+  <div class="empty">请先运行 <code>py run.py update</code> 生成情绪快照，<br>
+  再运行 <code>py run.py swing</code> 生成波段信号。</div>
+</div>
+{% endif %}
+
+{% for c in cards %}
+{% if c.snap %}
+<div class="panel">
+  <div class="mhead">
+    <div>
+      <div class="metric">
+        <span class="val sm" style="color:{{ c.color }}">{{ c.snap.sentiment_score }}</span>
+        <span class="badge" style="color:{{ c.color }}; background:{{ c.color }}1f;
+                     border-color:{{ c.color }}45">{{ c.snap.sentiment_level }}</span>
+      </div>
+    </div>
+    <div class="meta">
+      <span style="font-size:13.5px; font-weight:500">{{ c.name }}</span>
+      <span class="stamp">{{ c.snap.date }} · 阈值来自 {{ c.version }}</span>
+    </div>
+    <div style="margin-left:auto; text-align:right">
+      <div class="micro" style="margin-bottom:6px">
+        {{ tip('极端区域状态') }}
+        <span style="text-transform:none; letter-spacing:0">（恐慌≤{{ c.panic_t }} / 过热≥{{ c.hot_t }}）</span>
+      </div>
+      {% if c.snap.is_extreme_panic %}
+        <span class="tag ok" style="font-size:12px; padding:3px 10px">已跌进极端恐慌区（分数 ≤{{ c.panic_t }}）</span>
+      {% elif c.snap.is_extreme_hot %}
+        <span class="tag no" style="font-size:12px; padding:3px 10px">已涨进极端过热区（分数 ≥{{ c.hot_t }}）</span>
+      {% else %}
+        <span class="tag wait" style="font-size:12px; padding:3px 10px">还没到极端区域，模型不会启动</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="micro" style="margin-bottom:8px">五套筛选条件今天的触发情况</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th class="txt">模型</th><th class="txt wrap">这套条件在筛什么</th><th class="txt">今天触发了吗</th>
+        <th title="触发那天的情绪分">信号日情绪分</th><th class="txt" title="预期见底还是预期见顶">预期方向</th>
+        <th class="txt" title="信号发出后要盯的 10 个交易日">观察窗口</th><th class="txt" title="窗口走到第几天了">进度</th>
+      </tr></thead>
+      <tbody>
+      {% for m in c.models %}
+      <tr>
+        <td class="txt"><b style="font-family:var(--font-mono)">模型{{ m.code }}</b></td>
+        <td class="txt wrap dim">{{ m.name }}</td>
+        <td class="txt">
+          {% if m.status == '已触发' %}
+            <span class="tag {{ 'ok' if m.signal and m.signal.signal_type == 'panic' else 'no' }}">已触发</span>
+          {% else %}<span class="muted">未触发</span>{% endif %}
+        </td>
+        {% if m.signal %}
+        <td>{{ m.signal.sentiment }}</td>
+        <td class="txt">{{ '预期见底' if m.signal.signal_type == 'panic' else '预期见顶' }}</td>
+        <td class="txt muted">{{ m.signal.signal_date }} ~ {{ m.signal.observe_end or '—' }}</td>
+        <td class="txt">
+          {% if m.signal.hit is none %}<span class="tag wait">还在观察</span>
+          {% elif m.signal.hit %}<span class="tag ok">对了</span>
+          {% else %}<span class="tag no">错了</span>{% endif %}
+        </td>
+        {% else %}
+        <td colspan="4" class="muted">—</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if c.recent %}
+  <div class="micro" style="margin:18px 0 8px">最近发出的信号后来怎么样了（近 45 天）</div>
+  <div class="tbl-wrap scroll-y">
+    <table>
+      <thead><tr>
+        <th class="txt" title="触发模型的那一天">信号日</th><th class="txt">模型</th><th class="txt">预期方向</th>
+        <th title="触发当天的情绪分">当日情绪分</th>
+        <th class="txt" title="观察窗口的最后一天">看到哪天</th>
+        <th title="这 10 天里出现的最低价或最高价">期间极值</th>
+        <th title="极值出现在信号后第几个交易日">出现在</th>
+        <th title="低点之后最多反弹多少 / 高点之后最多回落多少">最多反弹或回落</th><th class="txt">结果</th>
+      </tr></thead>
+      <tbody>
+      {% for s in c.recent %}
+      <tr class="{{ 'hit-row' if s.hit == 1 else ('fail-row' if s.hit == 0 else '') }}">
+        <td class="txt">{{ s.signal_date }}</td>
+        <td class="txt" style="font-family:var(--font-mono)">模型{{ s.model_code }}</td>
+        <td class="txt">
+          <span class="tag {{ 'ok' if s.signal_type == 'panic' else 'no' }}">{{ '预期见底' if s.signal_type == 'panic' else '预期见顶' }}</span>
+        </td>
+        <td>{{ s.sentiment }}</td>
+        <td class="txt muted">{{ s.observe_end or '—' }}</td>
+        <td>{% if s.signal_type == 'panic' %}{{ s.win_min or '—' }}<span class="muted"> ({{ s.win_min_date or '—' }})</span>
+            {% else %}{{ s.win_max or '—' }}<span class="muted"> ({{ s.win_max_date or '—' }})</span>{% endif %}</td>
+        <td>{% if s.signal_type == 'panic' %}第 {{ s.win_min_lag if s.win_min_lag is not none else '—' }} 天
+            {% else %}第 {{ s.win_max_lag if s.win_max_lag is not none else '—' }} 天{% endif %}</td>
+        <td>{% if s.signal_type == 'panic' %}
+              <span class="down">{{ '%.2f%%' % (s.rebound_after_min * 100) if s.rebound_after_min is not none else '—' }}</span>
+            {% else %}
+              <span class="up">{{ '%.2f%%' % (s.drawdown_after_max * 100) if s.drawdown_after_max is not none else '—' }}</span>
+            {% endif %}</td>
+        <td class="txt">{% if s.hit is none %}<span class="tag wait">还在观察</span>
+            {% elif s.hit %}<span class="tag ok">对了</span>
+            {% else %}<span class="tag no">错了</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

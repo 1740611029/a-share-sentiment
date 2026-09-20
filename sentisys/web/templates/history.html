@@ -1,42 +1,96 @@
 {% extends "base.html" %}
 {% block title %}情绪历史{% endblock %}
+{% block pagetitle %}情绪历史{% endblock %}
+{% block pagesub %}三个市场的情绪走势曲线 · 点曲线上的标记可以看那次信号后来准不准{% endblock %}
+{% block head %}<style>
+.clegend{display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+         margin:0 0 12px; font-size:11.5px; color:var(--tx-3)}
+.clegend span{display:inline-flex; align-items:center; gap:6px}
+.clegend svg{display:block; flex:0 0 auto}
+</style>{% endblock %}
+
 {% block content %}
-<div class="panel">
-  <h2>情绪历史（默认最近2个月，仅显示交易日）</h2>
-  <div style="margin-bottom:14px">
-    {% for d, label in [(7, '最近7天'), (30, '最近30天'), (60, '最近2个月'), (90, '最近3个月')] %}
-    <button class="btn {{ 'active' if days == d }}" onclick="location.href='/history?days={{ d }}'">{{ label }}</button>
-    {% endfor %}
+<div class="note-bar">
+  <div>
+    <b style="color:var(--tx-1)">怎么读这张图</b><br>
+    三条线是三个市场的{{ tip('情绪分') }}，纵轴 0~100，<b>越往上越热、越往下越恐慌</b>。<br>
+    曲线上的三角标记是{{ tip('极端恐慌') }} / {{ tip('极端过热') }}信号，空心菱形是{{ tip('波段信号') }}。
+    <b>把鼠标移到标记上，或者直接点一下</b>，就能看到那次信号发出去以后，市场到底有没有真的见底（见顶）。<br>
+    下面那张明细表是同样数据的表格版，按日期从新到旧排列。
   </div>
-  <canvas id="chart" height="110"></canvas>
 </div>
 
 <div class="panel">
-  <h2>每日明细</h2>
-  <div style="max-height:520px; overflow:auto">
-  <table id="detail">
-    <thead><tr>
-      <th>日期</th>
-      {% for m, name in market_names.items() %}
-      <th>{{ name }}</th><th>状态</th><th>涨跌幅</th><th>变化</th><th>250日分位</th><th>信号</th>
+  <div class="panel-hd">
+    <h2>情绪走势曲线</h2>
+    <span class="hint muted">只画交易日，周末和节假日不占位置</span>
+    <div class="right btns">
+      {% for d, label in [(7, '最近7天'), (30, '最近30天'), (60, '最近2个月'), (90, '最近3个月')] %}
+      <button class="btn {{ 'on' if days == d }}" onclick="location.href='/history?days={{ d }}'">{{ label }}</button>
       {% endfor %}
-    </tr></thead>
-    <tbody></tbody>
-  </table>
+    </div>
+  </div>
+
+  <div class="clegend">
+    <span><svg width="14" height="12"><line x1="1" y1="6" x2="13" y2="6" stroke="#60A5FA" stroke-width="2"/></svg>A股全市场</span>
+    <span><svg width="14" height="12"><line x1="1" y1="6" x2="13" y2="6" stroke="#FB923C" stroke-width="2"/></svg>创业板</span>
+    <span><svg width="14" height="12"><line x1="1" y1="6" x2="13" y2="6" stroke="#A78BFA" stroke-width="2"/></svg>科创板</span>
+    <span style="color:var(--line-3)">｜</span>
+    <span title="分数跌破该市场的极端分数线时标记"><svg width="12" height="12"><polygon points="6,2 11,10 1,10" fill="#2BD98A"/></svg>极端恐慌信号</span>
+    <span title="分数涨破该市场的极端分数线时标记"><svg width="12" height="12"><polygon points="6,10 11,2 1,2" fill="#FF6161"/></svg>极端过热信号</span>
+    <span title="波段模型筛出的可能转折点"><svg width="12" height="12"><polygon points="6,1 11,6 6,11 1,6" fill="none" stroke="#FBBF24" stroke-width="1.8"/></svg>波段底部信号</span>
+    <span title="波段模型筛出的可能转折点"><svg width="12" height="12"><polygon points="6,1 11,6 6,11 1,6" fill="none" stroke="#C084FC" stroke-width="1.8"/></svg>波段顶部信号</span>
+  </div>
+
+  <div class="chart-box"><canvas id="chart"></canvas></div>
+</div>
+
+<div class="panel">
+  <div class="panel-hd">
+    <h2>每日明细</h2>
+    <span class="hint muted">按日期从新到旧</span>
+  </div>
+  <div class="tbl-wrap scroll-y tbl-sticky">
+    <table id="detail">
+      <thead>
+        <tr class="grp-row">
+          <th class="txt" rowspan="2">日期</th>
+          {% for m, name in market_names.items() %}
+          <th class="txt" colspan="6">{{ name }}</th>
+          {% endfor %}
+        </tr>
+        <tr>
+          {% for m, name in market_names.items() %}
+          <th title="当天的情绪分，0~100，越大越热">情绪分</th>
+          <th class="txt" title="分数落在七档里的哪一档">冷暖档位</th>
+          <th title="参考大盘当天的涨跌幅">指数涨跌</th>
+          <th title="比上一个交易日涨跌了几分">较前一日</th>
+          <th title="过去一年里有多少比例的日子比这天冷">近一年位置</th>
+          <th class="txt" title="是否触发极端信号或波段信号">信号</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 </div>
 
 <div id="modal"><div class="box">
-  <h3>极端信号详情</h3>
+  <h3 id="modal-title">信号详情</h3>
   <div id="modal-body"></div>
-  <button class="btn" style="margin-top:14px" onclick="document.getElementById('modal').style.display='none'">关闭</button>
+  <button class="btn" style="margin-top:16px" onclick="document.getElementById('modal').style.display='none'">关闭</button>
 </div></div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 const series = {{ series | tojson }};
 const names = {{ market_names | tojson }};
-const colors = {A_SHARE: '#7ea6ff', CHINEXT: '#f0a35e', STAR: '#4ecb8f'};
+const swingMarks = {{ swing_marks | tojson }};
+const colors = {A_SHARE: '#60A5FA', CHINEXT: '#FB923C', STAR: '#A78BFA'};
 const markets = Object.keys(series);
+
+const TICK = '#6B7489', GRID = 'rgba(148,151,169,.07)', LINE = '#2A3140';
 
 // 对齐日期轴（并集）
 const dateSet = new Set();
@@ -55,73 +109,159 @@ const datasets = markets.map(m => ({
   data: labels.map(d => maps[m][d] ? maps[m][d].sentiment_score : null),
   borderColor: colors[m], backgroundColor: colors[m],
   borderWidth: 1.6, pointRadius: 0, spanGaps: false, tension: .25,
+  _line: true,
 }));
+// 波段信号标记层（空心菱形，套在极端信号外圈；先绘制使其位于底层）
+const swingMap = {};
+markets.forEach(m => {
+  swingMap[m] = {};
+  (swingMarks[m] || []).forEach(k => swingMap[m][k.date] = k);
+  const mkPts = (type) => labels.map(d => {
+    const r = maps[m][d];
+    const k = swingMap[m][d];
+    return (r && k && k.signal_type === type)
+      ? {x: d, y: r.sentiment_score, market: m, date: d, swing: true} : null;
+  }).filter(Boolean);
+  datasets.push({label: names[m] + ' 波段底部信号', data: mkPts('panic'), type: 'scatter',
+                 pointStyle: 'rectRot', radius: 9, borderWidth: 1.8,
+                 backgroundColor: 'transparent', borderColor: '#FBBF24', showLine: false});
+  datasets.push({label: names[m] + ' 波段顶部信号', data: mkPts('hot'), type: 'scatter',
+                 pointStyle: 'rectRot', radius: 9, borderWidth: 1.8,
+                 backgroundColor: 'transparent', borderColor: '#C084FC', showLine: false});
+});
 // 极端信号标记层
 markets.forEach(m => {
-  const panicPts = labels.map((d, i) => {
+  const panicPts = labels.map(d => {
     const r = maps[m][d];
     return (r && r.is_extreme_panic) ? {x: d, y: r.sentiment_score, market: m, date: d} : null;
   }).filter(Boolean);
-  const hotPts = labels.map((d, i) => {
+  const hotPts = labels.map(d => {
     const r = maps[m][d];
     return (r && r.is_extreme_hot) ? {x: d, y: r.sentiment_score, market: m, date: d} : null;
   }).filter(Boolean);
   datasets.push({label: names[m] + ' 极端恐慌', data: panicPts, type: 'scatter',
-                 pointStyle: 'triangle', radius: 7, backgroundColor: '#4ecb8f', showLine: false});
+                 pointStyle: 'triangle', radius: 7, backgroundColor: '#2BD98A',
+                 borderColor: '#0B0D12', borderWidth: 1, showLine: false});
   datasets.push({label: names[m] + ' 极端过热', data: hotPts, type: 'scatter',
                  pointStyle: 'triangle', pointRotation: 180, radius: 7,
-                 backgroundColor: '#f16d6d', showLine: false});
+                 backgroundColor: '#FF6161', borderColor: '#0B0D12', borderWidth: 1,
+                 showLine: false});
 });
 
 const chart = new Chart(document.getElementById('chart'), {
   type: 'line',
   data: {labels, datasets},
   options: {
+    responsive: true,
+    maintainAspectRatio: false,
     interaction: {mode: 'index', intersect: false, axis: 'x'},
     plugins: {
-      legend: {labels: {color: '#aab4d0', boxWidth: 14}},
+      legend: {display: false},
       tooltip: {
+        backgroundColor: '#171B24',
+        borderColor: '#3A4356',
+        borderWidth: 1,
+        titleColor: '#E6E9F0',
+        bodyColor: '#9AA3B8',
+        padding: 10,
+        cornerRadius: 6,
+        displayColors: true,
+        boxWidth: 8, boxHeight: 8, usePointStyle: true,
+        filter: (item) => item.parsed.y != null,
         callbacks: {
           label: (item) => {
             const v = item.parsed.y;
-            return `${item.dataset.label}: ${v == null ? '—' : v.toFixed(2)}`;
+            return ` ${item.dataset.label}: ${v == null ? '—' : v.toFixed(2)}`;
           },
         },
       },
     },
     scales: {
-      x: {ticks: {color: '#7d879e', maxTicksLimit: 20}, grid: {color: '#1d2740'}},
-      y: {min: 0, max: 100, ticks: {color: '#7d879e'}, grid: {color: '#1d2740'}},
+      x: {
+        ticks: {color: TICK, maxTicksLimit: 18, font: {size: 10.5}},
+        grid: {color: GRID, drawTicks: false},
+        border: {color: LINE},
+      },
+      y: {
+        min: 0, max: 100,
+        ticks: {color: TICK, stepSize: 20, font: {size: 10.5}},
+        grid: {color: GRID, drawTicks: false},
+        border: {color: LINE},
+      },
     },
     onClick: (e, els) => {
       if (!els.length) return;
+      for (const el of els) {
+        const pt = chart.data.datasets[el.datasetIndex].data[el.index];
+        if (pt && pt.swing) { showSwing(pt.market, pt.date); return; }
+      }
       const el = els[0];
-      const ds = chart.data.datasets[el.datasetIndex];
-      const pt = ds.data[el.index];
+      const pt = chart.data.datasets[el.datasetIndex].data[el.index];
       if (pt && pt.market) showSignal(pt.market, pt.date);
     },
   },
 });
 
+function openModal(title, html) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').style.display = 'flex';
+}
+const fmt = v => (v == null || v === '') ? '—' : v;
+const pct = v => v == null ? '—' : (v * 100).toFixed(2) + '%';
+
 function showSignal(market, date) {
   fetch(`/api/signal_detail?market=${market}&date=${date}`)
     .then(r => r.json()).then(s => {
-      const body = document.getElementById('modal-body');
-      if (s.note) { body.innerHTML = `<p>${s.note}</p>`; }
-      else {
-        const fmt = v => v == null ? '—' : v;
-        body.innerHTML = `
-          <p>市场：${names[market]}　信号日期：${s.signal_date}</p>
-          <p>情绪分数：${fmt(s.sentiment)}　信号类型：${s.signal_type === 'panic' ? '极端恐慌' : '极端过热'}</p>
-          <p>T+0：${s.hit_t0 ? '命中' : '未命中'}　T+1：${s.hit_t1 ? '命中' : '未命中'}　T+2：${s.hit_t2 ? '命中' : '未命中'}</p>
-          <p>实际顶/底日期：${fmt(s.pivot_date)}　偏差：${fmt(s.lag)} 个交易日</p>
-          <p>最大反弹：${s.max_rebound != null ? (s.max_rebound * 100).toFixed(2) + '%' : '—'}
-             ｜最大回撤：${s.max_drawdown != null ? (s.max_drawdown * 100).toFixed(2) + '%' : '—'}</p>
-          <p>结果：<b>${s.success == null ? '未确认' : (s.success ? '成功' : '失败')}</b>
-             ｜同类信号累计命中率：${s.cum_hit_rate != null ? (s.cum_hit_rate * 100).toFixed(0) + '%' : '—'}
-             （${s.sample_tag} 样本，run #${s.run_id}）</p>`;
-      }
-      document.getElementById('modal').style.display = 'flex';
+      if (s.note) { openModal('信号详情', `<p>${s.note}</p>`); return; }
+      const hits = [0, 1, 2].map(k => {
+        const ok = s['hit_t' + k];
+        const lab = k === 0 ? '当天' : '第 ' + (k + 1) + ' 个交易日';
+        return `<span class="tag ${ok ? 'ok' : 'no'}">${lab} ${ok ? '✓ 已见底' : '✗ 还没'}</span>`;
+      }).join(' ');
+      openModal('那次信号，后来准了吗', `
+        <p><span class="micro">市场</span> ${names[market]}　<span class="micro">信号日期</span> ${s.signal_date}</p>
+        <p><span class="micro">当天情绪分</span> <b>${fmt(s.sentiment)}</b>　
+           <span class="micro">信号类型</span> ${s.signal_type === 'panic' ? '极端恐慌（当时预期见底）' : '极端过热（当时预期见顶）'}</p>
+        <p style="margin:10px 0">${hits}</p>
+        <p><span class="micro">实际见${s.signal_type === 'panic' ? '底' : '顶'}日期</span> ${fmt(s.pivot_date)}　
+           <span class="micro">晚了几天</span> ${s.lag == null ? '—' : s.lag + ' 个交易日'}</p>
+        <p><span class="micro">期间最多涨</span> ${pct(s.max_rebound)}　
+           <span class="micro">期间最多跌</span> ${pct(s.max_drawdown)}</p>
+        <p>结果：<b class="${s.success == null ? 'muted' : (s.success ? 'down' : 'up')}">${s.success == null ? '还没走完，未知' : (s.success ? '对了' : '错了')}</b>
+           ｜ 同类信号历史上十次能对几次 <b>${s.cum_hit_rate != null ? (s.cum_hit_rate * 100).toFixed(0) + '%' : '—'}</b>
+           <span class="muted">（${s.sample_tag === 'oos' ? '样本外' : (s.sample_tag === 'train' ? '训练期' : '全量')}统计，第 #${s.run_id} 次回测）</span></p>`);
+    });
+}
+
+function showSwing(market, date) {
+  fetch(`/api/swing_detail?market=${market}&date=${date}`)
+    .then(r => r.json()).then(res => {
+      if (res.note) { openModal('波段信号详情', `<p>${res.note}</p>`); return; }
+      const hitTxt = h => h == null ? '<span class="tag wait">还在观察</span>'
+        : (h ? '<span class="tag ok">对了</span>' : '<span class="tag no">错了</span>');
+      let html = `<p><span class="micro">市场</span> ${names[market]}　
+                    <span class="micro">信号日期</span> ${res.signal_date}</p>
+                  <p class="muted" style="margin-bottom:12px">当天触发了下面这些筛选条件（往后看 10 个交易日，看有没有形成阶段性低点或高点）：</p>`;
+      res.signals.forEach(s => {
+        const isPanic = s.signal_type === 'panic';
+        html += `<div class="mcard">
+          <div class="mh">
+            <b>模型${s.model_code} · ${s.model_name}</b>
+            <span class="tag ${isPanic ? 'ok' : 'no'}">${isPanic ? '预期见底' : '预期见顶'}</span>
+            <span style="margin-left:auto">${hitTxt(s.hit)}</span>
+          </div>
+          <p><span class="micro">当天情绪分</span> ${fmt(s.sentiment)}　
+             <span class="micro">当天收盘价</span> ${fmt(s.t0_close)}　
+             <span class="micro">观察截止日</span> ${fmt(s.observe_end)}</p>
+          <p><span class="micro">10天内最低价</span> ${fmt(s.win_min)}（${fmt(s.win_min_date)}，第 ${fmt(s.win_min_lag)} 个交易日）
+             ｜从信号日跌到低点 ${pct(s.drop_t0_to_min)}｜低点之后最多反弹 <span class="down">${pct(s.rebound_after_min)}</span></p>
+          <p><span class="micro">10天内最高价</span> ${fmt(s.win_max)}（${fmt(s.win_max_date)}，第 ${fmt(s.win_max_lag)} 个交易日）
+             ｜从信号日涨到高点 ${pct(s.rise_t0_to_max)}｜高点之后最多回落 <span class="up">${pct(s.drawdown_after_max)}</span></p>
+          <p class="muted">这套筛选条件历史上十次能对几次：${pct(s.cum_hit_rate)}</p>
+        </div>`;
+      });
+      openModal('那天的波段信号，后来怎么样', html);
     });
 }
 
@@ -130,27 +270,31 @@ const tbody = document.querySelector('#detail tbody');
 const allDates = [...labels].reverse();
 allDates.forEach(d => {
   const tr = document.createElement('tr');
-  let html = `<td>${d}</td>`;
+  let html = `<td class="txt">${d}</td>`;
   markets.forEach(m => {
     const r = maps[m][d];
-    if (!r) { html += '<td colspan="5" class="muted">缺失</td>'; return; }
+    if (!r) { html += '<td colspan="6" class="muted" title="这一天该市场没有数据">缺失</td>'; return; }
     const chg = r.daily_change;
-    const chgTxt = chg == null ? '' : (chg > 0 ? `+${chg}` : `${chg}`);
+    const chgTxt = chg == null ? '—' : (chg > 0 ? `+${chg}` : `${chg}`);
+    const chgCls = chg == null ? 'muted' : (chg > 0 ? 'up' : (chg < 0 ? 'down' : 'muted'));
     const idxRet = r.idx_ret_1d;
-    let idxTxt = '—';
-    let idxCls = 'muted';
+    let idxTxt = '—', idxCls = 'muted';
     if (idxRet != null) {
       idxTxt = (idxRet > 0 ? '+' : '') + idxRet.toFixed(2) + '%';
-      idxCls = idxRet > 0 ? 'tag-up' : (idxRet < 0 ? 'tag-down' : 'muted');
+      idxCls = idxRet > 0 ? 'up' : (idxRet < 0 ? 'down' : 'muted');
     }
-    let sig = '';
-    if (r.is_extreme_panic) sig = '<span class="sig-panic">极端恐慌</span>';
-    else if (r.is_extreme_hot) sig = '<span class="sig-hot">极端过热</span>';
-    else if (r.pattern) sig = `<span class="muted">${r.pattern}</span>`;
-    html += `<td><b>${r.sentiment_score}</b></td><td>${r.sentiment_level || ''}</td>
+    let sig = '<span class="muted">—</span>';
+    if (r.is_extreme_panic) sig = '<span class="tag ok" title="分数跌破该市场的极端分数线">极端恐慌</span>';
+    else if (r.is_extreme_hot) sig = '<span class="tag no" title="分数涨破该市场的极端分数线">极端过热</span>';
+    else if (r.pattern) sig = `<span class="tag wait" title="情绪形态提示">${r.pattern}</span>`;
+    const k = swingMap[m][d];
+    if (k) sig += ` <span class="tag acc" title="触发的波段模型：${k.models.join('、')}">◆ 波段 ${k.models.join('')}</span>`;
+    html += `<td><b>${r.sentiment_score}</b></td>
+             <td class="txt">${r.sentiment_level || ''}</td>
              <td class="${idxCls}">${idxTxt}</td>
-             <td class="${chg > 0 ? 'tag-up' : 'tag-down'}">${chgTxt}</td>
-             <td class="muted">${r.percentile250 ?? ''}</td><td>${sig}</td>`;
+             <td class="${chgCls}">${chgTxt}</td>
+             <td class="muted">${r.percentile250 ?? '—'}</td>
+             <td class="txt">${sig}</td>`;
   });
   tr.innerHTML = html;
   tbody.appendChild(tr);

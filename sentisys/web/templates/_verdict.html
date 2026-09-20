@@ -1,0 +1,30 @@
+{# 统计显著性结论条 —— 首页与情绪回测页共用。
+   用法：{% from "_verdict.html" import verdict_row %}  然后 {{ verdict_row(stats, '见底方向') }}
+   依赖 base.html 里的 .vr / .vcmp 样式。 #}
+{% macro verdict_row(s, label) %}
+{% if s and s.verdict %}
+{% set v = s.verdict %}
+{% set cls = 'good' if v.startswith('优于') else ('bad' if v.startswith('明显不如') else ('na' if (v.startswith('样本太少') or v.startswith('无法')) else 'weak')) %}
+{% set ic = '✓' if cls == 'good' else ('✕' if cls == 'bad' else ('?' if cls == 'na' else '·')) %}
+<div class="vr {{ cls }}">
+  <span class="ic">{{ ic }}</span>
+  <div style="min-width:0">
+    <span class="lab">{{ label }}：{{ v }}</span>
+    <span>{{ s.verdict_detail }}</span>
+    {% if s.baseline is not none %}
+    <div class="vcmp">
+      <span>瞎猜 {{ '%.0f%%'|format(s.baseline * 100) }}</span>
+      {% if s.lift is not none %}
+      <span>优势 <b style="color:{{ 'var(--down)' if s.lift > 0 else 'var(--up)' }}">{{ '%+.0fpp'|format(s.lift * 100) }}</b></span>
+      {% endif %}
+      {% set pv = s.p2 if s.p2 is not none else s.p_value %}
+      {% if pv is not none %}<span>双尾p={{ '%.3f'|format(pv) }}</span>{% endif %}
+      {% if s.ci_low is not none %}
+      <span>95%CI {{ '%.0f%%'|format(s.ci_low * 100) }}~{{ '%.0f%%'|format(s.ci_high * 100) }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}

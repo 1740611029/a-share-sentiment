@@ -1,47 +1,132 @@
 {% extends "base.html" %}
+{% from "_verdict.html" import verdict_row %}
+{% block title %}情绪概览{% endblock %}
+{% block pagetitle %}情绪概览{% endblock %}
+{% block pagesub %}三个市场今天各是多少分 · 有没有触发极端信号 · 这套信号历史上准不准{% endblock %}
+{% block head %}<style>
+.scale{position:relative; height:5px; border-radius:3px; background:var(--bg-3); margin-top:4px}
+.scale i{position:absolute; left:0; top:0; bottom:0; border-radius:3px;
+         transition:width .6s cubic-bezier(.22,1,.36,1)}
+.scale u{position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--line-3)}
+.scale-x{display:flex; justify-content:space-between; margin-top:6px;
+         font-family:var(--font-mono); font-size:10px; color:var(--tx-3)}
+.thr{font-family:var(--font-mono); font-size:10.5px; color:var(--tx-3); letter-spacing:.02em}
+.sig-line{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+          padding-top:11px; border-top:1px solid var(--line-1)}
+</style>{% endblock %}
+
 {% block content %}
 <div class="cards">
   {% for c in cards %}
   <div class="card">
-    <h3>{{ c.name }}情绪 <span class="muted">{{ c.date or '暂无数据' }}</span></h3>
+    <div class="hd">
+      <span class="nm">{{ c.name }}</span>
+      <span class="badge plain">{{ c.version }}</span>
+      <span class="dt">{{ c.date or '暂无数据' }}</span>
+    </div>
+
     {% if c.sentiment_score is not none %}
-    <div class="score" style="color: {{ c.color }}">{{ c.sentiment_score }}</div>
-    <span class="level-badge" style="background: {{ c.color }}">{{ c.sentiment_level }}</span>
-    <p style="margin-top:10px">{{ c.trend }}</p>
-    {% if c.idx_ret_1d is not none %}
-    <p class="muted" style="margin-top:4px">
-      参考指数
-      {% if c.idx_ret_1d > 0 %}<span class="tag-up">+{{ '%.2f%%'|format(c.idx_ret_1d) }}</span>
-      {% elif c.idx_ret_1d < 0 %}<span class="tag-down">{{ '%.2f%%'|format(c.idx_ret_1d) }}</span>
-      {% else %}<span class="muted">0.00%</span>{% endif %}
-    </p>
-    {% endif %}
-    <p class="muted" style="margin-top:6px">
-      20日分位 {{ c.percentile20 }}% ｜ 60日 {{ c.percentile60 }}% ｜ 250日 {{ c.percentile250 }}%
-    </p>
-    <p style="margin-top:8px">极端信号：
-      {% if c.signal == '极端恐慌' %}<span class="sig-panic">极端恐慌</span>
-      {% elif c.signal == '极端过热' %}<span class="sig-hot">极端过热</span>
-      {% else %}<span class="muted">无</span>{% endif %}
-      {% if c.pattern %}<span class="muted">（{{ c.pattern }}）</span>{% endif %}
-      {% if c.divergence %}<span class="muted">｜{{ c.divergence }}</span>{% endif %}
-    </p>
+    <div>
+      <div class="micro" style="margin-bottom:6px">{{ tip('情绪分') }}</div>
+      <div class="metric">
+        <span class="val" style="color:{{ c.color }}">{{ c.sentiment_score }}</span>
+        <span class="badge" style="color:{{ c.color }}; background:{{ c.color }}1f;
+                     border-color:{{ c.color }}45">{{ c.sentiment_level }}</span>
+      </div>
+      <div class="scale">
+        <i style="width:{{ c.sentiment_score }}%; background:{{ c.color }}"></i>
+        <u style="left:{{ c.panic_t }}%" title="极端恐慌阈值：分数 ≤{{ c.panic_t }} 才算"></u>
+        <u style="left:{{ c.hot_t }}%" title="极端过热阈值：分数 ≥{{ c.hot_t }} 才算"></u>
+      </div>
+      <div class="scale-x">
+        <span>0 极度恐慌</span>
+        <span class="thr">{{ tip('极端阈值') }} 恐慌≤{{ c.panic_t }} / 过热≥{{ c.hot_t }}</span>
+        <span>100 极度过热</span>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="k">{{ tip('参考指数') }}</div>
+        <div class="v {{ 'up' if c.idx_ret_1d and c.idx_ret_1d > 0 else ('down' if c.idx_ret_1d and c.idx_ret_1d < 0 else '') }}">
+          {% if c.idx_ret_1d is not none %}{{ '+' if c.idx_ret_1d > 0 }}{{ '%.2f%%'|format(c.idx_ret_1d) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat">
+        <div class="k">{{ tip('日变化') }}</div>
+        <div class="v {{ 'up' if c.daily_change and c.daily_change > 0 else ('down' if c.daily_change and c.daily_change < 0 else '') }}">
+          {% if c.daily_change is not none %}{{ '+' if c.daily_change > 0 }}{{ '%.2f'|format(c.daily_change) }}{% else %}—{% endif %}
+        </div>
+      </div>
+      <div class="stat"><div class="k">{{ tip('20日分位') }}</div>
+        <div class="v">{{ '%.0f'|format(c.percentile20) if c.percentile20 is not none else '—' }}</div></div>
+      <div class="stat"><div class="k">{{ tip('60日分位') }}</div>
+        <div class="v">{{ '%.0f'|format(c.percentile60) if c.percentile60 is not none else '—' }}</div></div>
+      <div class="stat"><div class="k">{{ tip('250日分位') }}</div>
+        <div class="v">{{ '%.0f'|format(c.percentile250) if c.percentile250 is not none else '—' }}</div></div>
+      <div class="stat"><div class="k">{{ tip('趋势') }}</div>
+        <div class="v">{{ c.trend or '—' }}</div></div>
+    </div>
+
+    <div class="sig-line">
+      <span class="micro">信号</span>
+      {% if c.signal == '极端恐慌' %}<span class="badge" style="color:var(--down); background:rgba(43,217,138,.13); border-color:rgba(43,217,138,.34)">极端恐慌</span>
+      {% elif c.signal == '极端过热' %}<span class="badge" style="color:var(--up); background:rgba(255,97,97,.13); border-color:rgba(255,97,97,.34)">极端过热</span>
+      {% else %}<span class="badge plain">无</span>{% endif %}
+      {% if c.pattern %}<span class="tag acc">{{ c.pattern }}</span>{% endif %}
+      {% if c.divergence %}<span class="tag wait">{{ c.divergence }}</span>{% endif %}
+    </div>
+
     {% if c.oos %}
-    <p class="muted" style="margin-top:8px">
-      样本外（{{ c.version }}）：
-      极端恐慌命中率
-      {% if c.oos.panic.hit_rate is not none %}{{ '%.0f%%'|format(c.oos.panic.hit_rate * 100) }}(n={{ c.oos.panic.signals }})
-      {% else %}样本不足{% endif %}
-      ｜极端过热命中率
-      {% if c.oos.hot.hit_rate is not none %}{{ '%.0f%%'|format(c.oos.hot.hit_rate * 100) }}(n={{ c.oos.hot.signals }})
-      {% else %}样本不足{% endif %}
-    </p>
+    <div>
+      <div class="micro" style="margin-bottom:5px">这套信号历史上准不准（{{ c.version }}）</div>
+      <div class="kv">
+        <span class="k">发「极端恐慌」后真的见底</span>
+        <span class="v">
+          {% if c.oos.panic.hit_rate is not none %}
+            <b style="color:{{ 'var(--down)' if c.oos.panic.hit_rate >= 0.9 else 'var(--tx-1)' }}">{{ '%.0f%%'|format(c.oos.panic.hit_rate * 100) }}</b>
+            <span class="muted">共 {{ c.oos.panic.signals }} 次</span>
+          {% else %}<span class="muted">样本太少（仅 {{ c.oos.panic.signals }} 次）</span>{% endif %}
+        </span>
+      </div>
+      <div class="kv">
+        <span class="k">发「极端过热」后真的见顶</span>
+        <span class="v">
+          {% if c.oos.hot.hit_rate is not none %}
+            <b style="color:{{ 'var(--down)' if c.oos.hot.hit_rate >= 0.9 else 'var(--tx-1)' }}">{{ '%.0f%%'|format(c.oos.hot.hit_rate * 100) }}</b>
+            <span class="muted">共 {{ c.oos.hot.signals }} 次</span>
+          {% else %}<span class="muted">样本太少（仅 {{ c.oos.hot.signals }} 次）</span>{% endif %}
+        </span>
+      </div>
+      {{ verdict_row(c.oos.panic, '见底方向') }}
+      {{ verdict_row(c.oos.hot, '见顶方向') }}
+      <div class="muted" style="font-size:11.5px; margin-top:6px; line-height:1.7">
+        以上取自{{ tip('样本外') }}数据（{{ tip('训练期') }}不算数）。<br>
+        <b style="color:var(--tx-2)">命中率必须和{{ tip('瞎猜基线') }}比才有意义</b>，
+        <a href="/glossary">为什么数字变小了 →</a>
+      </div>
+    </div>
     {% endif %}
+
     {% else %}
-    <p class="muted">尚未生成数据，请先执行：python run.py update --market {{ c.market }}</p>
+    <div class="empty">
+      尚未生成数据<br>
+      请先执行 <code>py run.py update --market {{ c.market }}</code>
+    </div>
     {% endif %}
   </div>
   {% endfor %}
 </div>
-<p class="muted">说明：情绪分数 0~100，越高越热。数据每日由 run.py update 计算生成；阈值与权重以激活模型版本为准。</p>
+
+<div class="note-bar">
+  <div>
+    <b style="color:var(--tx-1)">怎么读这张卡片</b><br>
+    分数是给市场量的「体温」，0~100，<b>数字越大越热</b>。它比的是过去一年——所以 10 分的意思是
+    「过去一年里，只有 10% 的日子比今天更冷」。<br>
+    卡片下方那条刻度线标出了这个市场<b>当前生效</b>的极端分数线（各市场自己调出来的，可能和配置文件里的默认值不同）。
+    分数越过线才会打出「极端恐慌 / 极端过热」信号。<br>
+    最下方两行是这套信号在{{ tip('样本外') }}数据上的历史成绩，<b>务必连「共几次」一起看</b>——次数太少时百分比不作数。<br>
+    页面里<span style="border-bottom:1px dashed var(--line-3)">带虚线的词</span>鼠标放上去有白话解释，全部术语见 <a href="/glossary">术语对照表</a>。
+  </div>
+</div>
 {% endblock %}
